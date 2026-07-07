@@ -28,6 +28,7 @@ class EntitySerializer
         private readonly SubscriberFactory $subscriberFactory,
         private readonly \Magento\Catalog\Model\ResourceModel\Category\CollectionFactory $categoryCollectionFactory,
         private readonly \Magento\Catalog\Model\ProductFactory $productFactory,
+        private readonly \Magento\Framework\App\ResourceConnection $resourceConnection,
     ) {
     }
 
@@ -111,7 +112,7 @@ class EntitySerializer
             }
         }
 
-        return [
+        $payload = [
             'id' => (int) $order->getEntityId(),
             'number' => (string) $order->getIncrementId(),
             'status' => (string) ($order->getStatus() ?: $order->getState() ?: 'pending'),
@@ -125,15 +126,13 @@ class EntitySerializer
             'date_modified' => $this->iso((string) $order->getUpdatedAt()),
             'date_paid' => $this->iso($datePaid),
             'date_completed' => 'complete' === $order->getState() ? $this->iso((string) $order->getUpdatedAt()) : null,
-            'customer_id' => $order->getCustomerId() ? (int) $order->getCustomerId() : null,
+            'customer_id' => $order->getCustomerId() ? (int) $order->getCustomerId() : 0,
             'customer_email' => (string) $order->getCustomerEmail(),
             'customer_note' => (string) $order->getCustomerNote(),
             'created_via' => $order->getRemoteIp() ? 'checkout' : 'admin',
             'payment_method' => null !== $payment ? (string) $payment->getMethod() : '',
             'payment_method_title' => $payments[0]['method_title'] ?? '',
             'transaction_id' => $payments[0]['transaction_id'] ?? null,
-            'billing' => $this->address($billing, (string) $order->getCustomerEmail()),
-            'shipping' => $this->address($shipping, (string) $order->getCustomerEmail()),
             'line_items' => $this->lineItems($order),
             'shipping_lines' => $shippingLines,
             'coupon_lines' => $couponLines,
@@ -142,12 +141,22 @@ class EntitySerializer
             'payments' => $payments,
             'refunds' => $refundDates,
         ];
+        $billingPayload = $this->address($billing, (string) $order->getCustomerEmail());
+        if (null !== $billingPayload) {
+            $payload['billing'] = $billingPayload;
+        }
+        $shippingPayload = $this->address($shipping, (string) $order->getCustomerEmail());
+        if (null !== $shippingPayload) {
+            $payload['shipping'] = $shippingPayload;
+        }
+
+        return $payload;
     }
 
     public function serializeCustomer(Customer $customer): array
     {
-        $billing = $customer->getDefaultBillingAddress();
-        $shipping = $customer->getDefaultShippingAddress() ?: $billing;
+        $billing = $customer->getDefaultBillingAddress() ?: null;
+        $shipping = ($customer->getDefaultShippingAddress() ?: null) ?? $billing;
 
         $newsletter = false;
         try {
@@ -159,7 +168,7 @@ class EntitySerializer
         } catch (\Throwable) {
         }
 
-        return [
+        $payload = [
             'id' => (int) $customer->getId(),
             'email' => (string) $customer->getEmail(),
             'first_name' => (string) $customer->getFirstname(),
@@ -171,15 +180,22 @@ class EntitySerializer
             'newsletter' => $newsletter,
             'date_created' => $this->iso((string) $customer->getCreatedAt()),
             'date_modified' => $this->iso((string) $customer->getUpdatedAt()),
-            'billing' => $this->customerAddress($billing),
-            'shipping' => $this->customerAddress($shipping),
         ];
+        $billingPayload = $this->customerAddress($billing);
+        if (null !== $billingPayload) {
+            $payload['billing'] = $billingPayload;
+        }
+        $shippingPayload = $this->customerAddress($shipping);
+        if (null !== $shippingPayload) {
+            $payload['shipping'] = $shippingPayload;
+        }
+
+        return $payload;
     }
 
     public function serializeProduct(Product $product): array
     {
-        $parentIds = $this->configurableType->getParentIdsByChild((int) $product->getId());
-        $parentId = \count($parentIds) > 0 ? (int) $parentIds[0] : null;
+        $parentId = $this->parentIdForChild((int) $product->getId());
         $isVariation = null !== $parentId;
 
         $stockItem = null;
@@ -509,6 +525,31 @@ class EntitySerializer
         $this->parentStubCache = ['id' => $parentId, 'product' => $product];
 
         return $product;
+    }
+
+    private ?array $parentByChildCache = null;
+
+    private function parentIdForChild(int $productId): ?int
+    {
+        if (null === $this->parentByChildCache) {
+            $this->parentByChildCache = [];
+            try {
+                $connection = $this->resourceConnection->getConnection();
+                $select = $connection->select()->from(
+                    $this->resourceConnection->getTableName('catalog_product_super_link'),
+                    ['product_id', 'parent_id']
+                );
+                foreach ($connection->fetchAll($select) as $row) {
+                    $childId = (int) $row['product_id'];
+                    if (!isset($this->parentByChildCache[$childId])) {
+                        $this->parentByChildCache[$childId] = (int) $row['parent_id'];
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return $this->parentByChildCache[$productId] ?? null;
     }
 
     private function categoryName(int $categoryId): ?string

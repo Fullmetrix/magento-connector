@@ -6,7 +6,7 @@
     <event name="checkout_cart_add_product_complete">
         <observer name="fullmetrix_cart_add" instance="Fullmetrix\Connector\Observer\CartAddProduct"/>
     </event>
-    <event name="sales_order_place_after">
-        <observer name="fullmetrix_order_place" instance="Fullmetrix\Connector\Observer\OrderPlaceAfter"/>
+    <event name="checkout_cart_save_after">
+        <observer name="fullmetrix_cart_save" instance="Fullmetrix\Connector\Observer\CartSaveAfter"/>
     </event>
 </config>

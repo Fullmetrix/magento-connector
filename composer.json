@@ -3,7 +3,6 @@
     "description": "Fullmetrix analytics, segmentation and marketing suite connector for Magento 2 / Adobe Commerce",
     "type": "magento2-module",
     "license": "OSL-3.0",
-    "version": "1.0.0",
     "homepage": "https://fullmetrix.com",
     "support": {
         "email": "support@fullmetrix.com",

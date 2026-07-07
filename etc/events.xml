@@ -21,4 +21,7 @@
     <event name="newsletter_subscriber_save_after">
         <observer name="fullmetrix_subscriber_save" instance="Fullmetrix\Connector\Observer\SubscriberSaveAfter"/>
     </event>
+    <event name="sales_order_place_after">
+        <observer name="fullmetrix_order_place" instance="Fullmetrix\Connector\Observer\OrderPlaceAfter"/>
+    </event>
 </config>

@@ -43,6 +43,12 @@ class EntityPaginator
             $collection->addFieldToFilter($idField, ['gt' => $lastId]);
             $collection->setOrder($idField, 'ASC');
             $collection->setPageSize($batchSize);
+            if ('products' === $entity && method_exists($collection, 'addMediaGalleryData')) {
+                try {
+                    $collection->addMediaGalleryData();
+                } catch (\Throwable) {
+                }
+            }
 
             $count = 0;
             foreach ($collection as $row) {

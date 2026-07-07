@@ -17,6 +17,7 @@ class CouponCommandHandler
         private readonly CouponFactory $couponFactory,
         private readonly StoreManagerInterface $storeManager,
         private readonly CustomerGroupCollectionFactory $customerGroupCollectionFactory,
+        private readonly \Magento\Catalog\Model\ProductFactory $productFactory,
     ) {
     }
 
@@ -108,42 +109,50 @@ class CouponCommandHandler
 
     private function applyPayload(Rule $rule, string $code, array $payload): void
     {
-        $discountType = (string) ($payload['discountType'] ?? 'percentage');
-        $amount = (float) ($payload['amount'] ?? 0);
-        $freeShipping = (bool) ($payload['freeShipping'] ?? false);
+        $isNew = !$rule->getRuleId();
 
-        $simpleAction = match ($discountType) {
-            'fixed_cart' => 'cart_fixed',
-            'fixed_product', 'fixed' => 'by_fixed',
-            default => 'by_percent',
-        };
-
-        $websiteIds = [];
-        foreach ($this->storeManager->getWebsites() as $website) {
-            $websiteIds[] = (int) $website->getId();
-        }
-        $customerGroupIds = [];
-        foreach ($this->customerGroupCollectionFactory->create() as $group) {
-            $customerGroupIds[] = (int) $group->getId();
+        if ($isNew) {
+            $websiteIds = [];
+            foreach ($this->storeManager->getWebsites() as $website) {
+                $websiteIds[] = (int) $website->getId();
+            }
+            $customerGroupIds = [];
+            foreach ($this->customerGroupCollectionFactory->create() as $group) {
+                $customerGroupIds[] = (int) $group->getId();
+            }
+            $rule->setIsActive(1);
+            $rule->setWebsiteIds($websiteIds);
+            $rule->setCustomerGroupIds($customerGroupIds);
         }
 
-        $rule->setName((string) ($payload['description'] ?? $code));
-        $rule->setDescription((string) ($payload['description'] ?? ''));
-        $rule->setIsActive(1);
         $rule->setCouponType(Rule::COUPON_TYPE_SPECIFIC);
         $rule->setCouponCode($code);
         $rule->setUseAutoGeneration(0);
-        $rule->setSimpleAction($simpleAction);
-        $rule->setDiscountAmount($amount);
-        $rule->setSimpleFreeShipping($freeShipping ? '2' : '0');
-        $rule->setWebsiteIds($websiteIds);
-        $rule->setCustomerGroupIds($customerGroupIds);
-        $rule->setDiscardSubsequentRules(!empty($payload['individualUse']) ? 1 : 0);
 
-        if (!empty($payload['usageLimit'])) {
+        if ($isNew || \array_key_exists('description', $payload)) {
+            $rule->setName((string) ($payload['description'] ?? $code) ?: $code);
+            $rule->setDescription((string) ($payload['description'] ?? ''));
+        }
+        if ($isNew || \array_key_exists('discountType', $payload)) {
+            $rule->setSimpleAction(match ((string) ($payload['discountType'] ?? 'percentage')) {
+                'fixed_cart' => 'cart_fixed',
+                'fixed_product', 'fixed' => 'by_fixed',
+                default => 'by_percent',
+            });
+        }
+        if ($isNew || \array_key_exists('amount', $payload)) {
+            $rule->setDiscountAmount((float) ($payload['amount'] ?? 0));
+        }
+        if ($isNew || \array_key_exists('freeShipping', $payload)) {
+            $rule->setSimpleFreeShipping(!empty($payload['freeShipping']) ? '2' : '0');
+        }
+        if ($isNew || \array_key_exists('individualUse', $payload)) {
+            $rule->setDiscardSubsequentRules(!empty($payload['individualUse']) ? 1 : 0);
+        }
+        if (\array_key_exists('usageLimit', $payload)) {
             $rule->setUsesPerCoupon((int) $payload['usageLimit']);
         }
-        if (!empty($payload['usageLimitPerUser'])) {
+        if (\array_key_exists('usageLimitPerUser', $payload)) {
             $rule->setUsesPerCustomer((int) $payload['usageLimitPerUser']);
         }
         if (!empty($payload['startsAt'])) {
@@ -153,8 +162,9 @@ class CouponCommandHandler
             $rule->setToDate($this->toDate((string) $payload['expiresAt']));
         }
 
-        if (!empty($payload['minimumAmount']) && (float) $payload['minimumAmount'] > 0) {
-            $rule->setData('conditions_serialized', json_encode([
+        if ($isNew || \array_key_exists('minimumAmount', $payload)) {
+            $minimumAmount = (float) ($payload['minimumAmount'] ?? 0);
+            $rule->setData('conditions_serialized', $minimumAmount > 0 ? json_encode([
                 'type' => \Magento\SalesRule\Model\Rule\Condition\Combine::class,
                 'attribute' => null,
                 'operator' => null,
@@ -165,11 +175,52 @@ class CouponCommandHandler
                     'type' => \Magento\SalesRule\Model\Rule\Condition\Address::class,
                     'attribute' => 'base_subtotal',
                     'operator' => '>=',
-                    'value' => (string) (float) $payload['minimumAmount'],
+                    'value' => (string) $minimumAmount,
                     'is_value_processed' => false,
                 ]],
-            ]));
+            ]) : null);
         }
+
+        if ($isNew || \array_key_exists('productIds', $payload)) {
+            $skus = $this->skusForProductIds(\is_array($payload['productIds'] ?? null) ? $payload['productIds'] : []);
+            $rule->setData('actions_serialized', \count($skus) > 0 ? json_encode([
+                'type' => \Magento\SalesRule\Model\Rule\Condition\Product\Combine::class,
+                'attribute' => null,
+                'operator' => null,
+                'value' => '1',
+                'is_value_processed' => null,
+                'aggregator' => 'all',
+                'conditions' => [[
+                    'type' => \Magento\SalesRule\Model\Rule\Condition\Product::class,
+                    'attribute' => 'sku',
+                    'operator' => '()',
+                    'value' => implode(',', $skus),
+                    'is_value_processed' => false,
+                ]],
+            ]) : null);
+        }
+    }
+
+    private function skusForProductIds(array $productIds): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $productIds)));
+        if (0 === \count($ids)) {
+            return [];
+        }
+        $skus = [];
+        foreach ($ids as $id) {
+            try {
+                $product = $this->productFactory->create();
+                $product->getResource()->load($product, $id);
+                $sku = (string) $product->getSku();
+                if ('' !== $sku) {
+                    $skus[] = $sku;
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return $skus;
     }
 
     private function findRuleByCode(string $code): ?Rule
