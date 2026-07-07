@@ -15,10 +15,10 @@ class HttpClient
         }
         self::$responseFinished = true;
         if (\function_exists('fastcgi_finish_request')) {
-            @fastcgi_finish_request();
+            fastcgi_finish_request();
         }
         if (\function_exists('ignore_user_abort')) {
-            @ignore_user_abort(true);
+            ignore_user_abort(true);
         }
     }
 
@@ -65,8 +65,8 @@ class HttpClient
             CURLOPT_NOSIGNAL => 1,
             CURLOPT_FOLLOWLOCATION => false,
         ]);
-        @curl_exec($ch);
-        @curl_close($ch);
+        curl_exec($ch);
+        curl_close($ch);
     }
 
     public function getJsonFast(string $url, array $headers): array

@@ -55,6 +55,8 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         exit(0);
     }
 
+    private $outputHandle = null;
+
     private function sendStreamHeaders(): void
     {
         if (!headers_sent()) {
@@ -67,11 +69,15 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         }
         set_time_limit(0);
         ignore_user_abort(false);
+        $this->outputHandle = fopen('php://output', 'wb');
     }
 
     private function emit(array $row): void
     {
-        echo (json_encode($row, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: '{}') . "\n";
+        if (null === $this->outputHandle) {
+            return;
+        }
+        fwrite($this->outputHandle, (json_encode($row, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: '{}') . "\n");
         flush();
     }
 }

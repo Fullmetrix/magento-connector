@@ -86,5 +86,4 @@ class Export extends AbstractApiAction implements HttpGetActionInterface
             ],
         ]);
     }
-
 }
