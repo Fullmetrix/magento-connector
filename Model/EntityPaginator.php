@@ -85,8 +85,7 @@ class EntityPaginator
             ->format('Y-m-d H:i:s');
         $collection->addFieldToFilter($updatedField, ['gteq' => $cutoff]);
         $collection->setOrder($updatedField, 'DESC');
-        $collection->setPageSize(min(500000, max(1, $limit)));
-        $collection->setCurPage((int) floor($offset / max(1, $limit)) + 1);
+        $collection->getSelect()->limit(min(500000, max(1, $limit)), max(0, $offset));
 
         $result = [];
         $idField = $this->idField($entity);
