@@ -100,7 +100,7 @@ class EntityPaginator
         $collection = match ($entity) {
             'orders' => $this->orderCollectionFactory->create(),
             'customers' => $this->customerCollectionFactory->create()->addAttributeToSelect('*'),
-            'products' => $this->productCollectionFactory->create()->addAttributeToSelect('*'),
+            'products' => $this->buildProductCollection(),
             'categories' => $this->buildCategoryCollection(),
             'coupons' => $this->buildCouponCollection(),
             'refunds' => $this->creditmemoCollectionFactory->create(),
@@ -122,6 +122,16 @@ class EntityPaginator
                 }
             }
         }
+
+        return $collection;
+    }
+
+    private function buildProductCollection(): object
+    {
+        $collection = $this->productCollectionFactory->create();
+        $collection->setStoreId(0);
+        $collection->addAttributeToSelect('*');
+        $collection->setFlag('has_stock_status_filter', true);
 
         return $collection;
     }
