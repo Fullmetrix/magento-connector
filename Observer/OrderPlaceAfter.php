@@ -72,11 +72,15 @@ class OrderPlaceAfter implements ObserverInterface
             if (false === $body) {
                 return;
             }
-            $this->httpClient->postFireAndForget(
-                $this->config->getAppOrigin() . '/api/checkout-consent',
-                $body,
-                $this->signer->buildHeaders($body)
-            );
+            $url = $this->config->getAppOrigin() . '/api/checkout-consent';
+            $headers = $this->signer->buildHeaders($body);
+            register_shutdown_function(function () use ($url, $body, $headers): void {
+                try {
+                    HttpClient::finishResponse();
+                    $this->httpClient->postFireAndForget($url, $body, $headers);
+                } catch (\Throwable) {
+                }
+            });
         } catch (\Throwable) {
         }
     }
