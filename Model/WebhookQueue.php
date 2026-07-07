@@ -6,6 +6,8 @@ namespace Fullmetrix\Connector\Model;
 
 class WebhookQueue
 {
+    private const MAX_QUEUE_SIZE = 50;
+
     private array $queue = [];
     private bool $shutdownRegistered = false;
 
@@ -21,7 +23,11 @@ class WebhookQueue
         if (!$this->config->isActive()) {
             return;
         }
-        $this->queue[$entityType . ':' . $entityId] = [
+        $key = $entityType . ':' . $entityId;
+        if (!isset($this->queue[$key]) && \count($this->queue) >= self::MAX_QUEUE_SIZE) {
+            return;
+        }
+        $this->queue[$key] = [
             'event' => $event,
             'entity_type' => $entityType,
             'data' => $data,
@@ -34,6 +40,7 @@ class WebhookQueue
         if (0 === \count($this->queue)) {
             return;
         }
+        HttpClient::finishResponse();
         $pending = $this->queue;
         $this->queue = [];
 
@@ -67,9 +74,6 @@ class WebhookQueue
         $this->shutdownRegistered = true;
         register_shutdown_function(function (): void {
             try {
-                if (\function_exists('fastcgi_finish_request')) {
-                    fastcgi_finish_request();
-                }
                 $this->flush();
             } catch (\Throwable) {
             }

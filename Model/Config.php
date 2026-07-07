@@ -17,10 +17,12 @@ class Config
     public const FLAG_WEBHOOKS_ENABLED = 'fullmetrix_webhooks_enabled';
     public const FLAG_PLUGIN_CONFIG = 'fullmetrix_plugin_config';
     public const FLAG_PLUGIN_CONFIG_AT = 'fullmetrix_plugin_config_at';
+    public const FLAG_PLUGIN_CONFIG_FAILED_AT = 'fullmetrix_plugin_config_failed_at';
     public const FLAG_API_BASE_OVERRIDE = 'fullmetrix_api_base';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
     private const CONFIG_TTL_SECONDS = 1800;
+    private const CONFIG_FAILURE_TTL_SECONDS = 300;
 
     public function __construct(
         private readonly FlagManager $flagManager,
@@ -104,6 +106,7 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_REGISTERED);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
+        $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
     }
 
     public function getCachedPluginConfig(): ?array
@@ -117,10 +120,30 @@ class Config
         return \is_array($data) ? $data : null;
     }
 
+    public function getStalePluginConfig(): ?array
+    {
+        $data = $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG);
+
+        return \is_array($data) ? $data : null;
+    }
+
+    public function isPluginConfigFetchOnCooldown(): bool
+    {
+        $failedAt = (int) $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
+
+        return $failedAt > 0 && (time() - $failedAt) < self::CONFIG_FAILURE_TTL_SECONDS;
+    }
+
     public function savePluginConfig(array $config): void
     {
         $this->flagManager->saveFlag(self::FLAG_PLUGIN_CONFIG, $config);
         $this->flagManager->saveFlag(self::FLAG_PLUGIN_CONFIG_AT, time());
+        $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
+    }
+
+    public function markPluginConfigFetchFailed(): void
+    {
+        $this->flagManager->saveFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT, time());
     }
 
     public function setApiBaseOverride(?string $apiBase): void

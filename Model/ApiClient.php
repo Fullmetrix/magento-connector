@@ -6,6 +6,9 @@ namespace Fullmetrix\Connector\Model;
 
 class ApiClient
 {
+    private bool $configMemoLoaded = false;
+    private ?array $configMemo = null;
+
     public function __construct(
         private readonly Config $config,
         private readonly HmacSigner $signer,
@@ -53,30 +56,36 @@ class ApiClient
 
     public function fetchPluginConfig(): ?array
     {
+        if ($this->configMemoLoaded) {
+            return $this->configMemo;
+        }
+        $this->configMemoLoaded = true;
+
         $cached = $this->config->getCachedPluginConfig();
         if (null !== $cached) {
-            return $cached;
+            return $this->configMemo = $cached;
         }
         if (!$this->config->isRegistered()) {
-            return null;
+            return $this->configMemo = null;
+        }
+        if ($this->config->isPluginConfigFetchOnCooldown()) {
+            return $this->configMemo = $this->config->getStalePluginConfig();
         }
 
-        $response = $this->httpClient->getJson(
+        $response = $this->httpClient->getJsonFast(
             $this->config->getApiBase() . '/config',
-            $this->signer->buildHeaders(''),
-            10
+            $this->signer->buildHeaders('')
         );
 
-        if (200 !== $response['status']) {
-            return null;
-        }
-        $decoded = json_decode($response['body'], true);
+        $decoded = 200 === $response['status'] ? json_decode($response['body'], true) : null;
         if (!\is_array($decoded)) {
-            return null;
+            $this->config->markPluginConfigFetchFailed();
+
+            return $this->configMemo = $this->config->getStalePluginConfig();
         }
         $this->config->savePluginConfig($decoded);
 
-        return $decoded;
+        return $this->configMemo = $decoded;
     }
 
     public function isTrackerEnabled(): bool

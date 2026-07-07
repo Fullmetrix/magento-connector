@@ -51,6 +51,7 @@ class TrackingQueue
             return;
         }
 
+        HttpClient::finishResponse();
         $pending = $this->events;
         $this->events = [];
 
