@@ -4,26 +4,26 @@
 <div class="fullmetrix-connection" style="max-width: 640px;">
     <?php if ($block->isRegistered()): ?>
         <div class="message message-success success">
-            <div><?= $block->escapeHtml(__('Boutique connectée à Fullmetrix avec le code %1.', $block->getConnectionCode())) ?></div>
+            <div><?= $escaper->escapeHtml(__('Boutique connectée à Fullmetrix avec le code %1.', $block->getConnectionCode())) ?></div>
         </div>
         <p>
-            <a class="action-default" href="<?= $block->escapeUrl($block->getAppUrl()) ?>" target="_blank" rel="noopener">
-                <?= $block->escapeHtml(__('Ouvrir le tableau de bord Fullmetrix')) ?>
+            <a class="action-default" href="<?= $escaper->escapeUrl($block->getAppUrl()) ?>" target="_blank" rel="noopener">
+                <?= $escaper->escapeHtml(__('Ouvrir le tableau de bord Fullmetrix')) ?>
             </a>
         </p>
-        <form action="<?= $block->escapeUrl($block->getDisconnectUrl()) ?>" method="post">
+        <form action="<?= $escaper->escapeUrl($block->getDisconnectUrl()) ?>" method="post">
             <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
             <button type="submit" class="action-secondary">
-                <?= $block->escapeHtml(__('Déconnecter la boutique')) ?>
+                <?= $escaper->escapeHtml(__('Déconnecter la boutique')) ?>
             </button>
         </form>
     <?php else: ?>
-        <p><?= $block->escapeHtml(__('Collez votre code de connexion Fullmetrix (format FMTX-XXXX-XXXX-XXXX) pour connecter cette boutique.')) ?></p>
-        <form action="<?= $block->escapeUrl($block->getSaveUrl()) ?>" method="post">
+        <p><?= $escaper->escapeHtml(__('Collez votre code de connexion Fullmetrix (format FMTX-XXXX-XXXX-XXXX) pour connecter cette boutique.')) ?></p>
+        <form action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" method="post">
             <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
             <div class="admin__field">
                 <label class="admin__field-label" for="fullmetrix_connection_code">
-                    <?= $block->escapeHtml(__('Code de connexion')) ?>
+                    <?= $escaper->escapeHtml(__('Code de connexion')) ?>
                 </label>
                 <div class="admin__field-control">
                     <input type="text" class="admin__control-text" id="fullmetrix_connection_code" name="connection_code" placeholder="FMTX-XXXX-XXXX-XXXX" style="max-width: 320px;"/>
@@ -31,7 +31,7 @@
             </div>
             <br/>
             <button type="submit" class="action-primary">
-                <?= $block->escapeHtml(__('Connecter la boutique')) ?>
+                <?= $escaper->escapeHtml(__('Connecter la boutique')) ?>
             </button>
         </form>
     <?php endif; ?>
