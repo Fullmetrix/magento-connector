@@ -1,0 +1,30 @@
+{
+    "name": "fullmetrix/magento-connector",
+    "description": "Fullmetrix analytics, segmentation and marketing suite connector for Magento 2 / Adobe Commerce",
+    "type": "magento2-module",
+    "license": "OSL-3.0",
+    "version": "1.0.0",
+    "homepage": "https://fullmetrix.com",
+    "support": {
+        "email": "support@fullmetrix.com",
+        "docs": "https://fullmetrix.com/integrations"
+    },
+    "require": {
+        "php": ">=8.1",
+        "magento/framework": ">=103.0",
+        "magento/module-sales": "*",
+        "magento/module-catalog": "*",
+        "magento/module-customer": "*",
+        "magento/module-sales-rule": "*",
+        "magento/module-newsletter": "*",
+        "magento/module-configurable-product": "*"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Fullmetrix\\Connector\\": ""
+        }
+    }
+}

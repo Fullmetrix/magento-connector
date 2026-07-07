@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <add id="Fullmetrix_Connector::connection"
+             title="Fullmetrix"
+             module="Fullmetrix_Connector"
+             sortOrder="90"
+             parent="Magento_Backend::marketing"
+             action="fullmetrix/connection/index"
+             resource="Fullmetrix_Connector::connection"/>
+    </menu>
+</config>

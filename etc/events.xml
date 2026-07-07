@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_save_after">
+        <observer name="fullmetrix_order_save" instance="Fullmetrix\Connector\Observer\OrderSaveAfter"/>
+    </event>
+    <event name="customer_save_after">
+        <observer name="fullmetrix_customer_save" instance="Fullmetrix\Connector\Observer\CustomerSaveAfter"/>
+    </event>
+    <event name="catalog_product_save_after">
+        <observer name="fullmetrix_product_save" instance="Fullmetrix\Connector\Observer\ProductSaveAfter"/>
+    </event>
+    <event name="catalog_category_save_after">
+        <observer name="fullmetrix_category_save" instance="Fullmetrix\Connector\Observer\CategorySaveAfter"/>
+    </event>
+    <event name="salesrule_rule_save_after">
+        <observer name="fullmetrix_salesrule_save" instance="Fullmetrix\Connector\Observer\SalesRuleSaveAfter"/>
+    </event>
+    <event name="sales_order_creditmemo_save_after">
+        <observer name="fullmetrix_creditmemo_save" instance="Fullmetrix\Connector\Observer\CreditmemoSaveAfter"/>
+    </event>
+    <event name="newsletter_subscriber_save_after">
+        <observer name="fullmetrix_subscriber_save" instance="Fullmetrix\Connector\Observer\SubscriberSaveAfter"/>
+    </event>
+</config>
