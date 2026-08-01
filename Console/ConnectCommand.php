@@ -29,6 +29,7 @@ class ConnectCommand extends Command
         $this->setDescription('Connecte la boutique à Fullmetrix avec un code de connexion');
         $this->addArgument('code', InputArgument::REQUIRED, 'Code de connexion FMTX-XXXX-XXXX-XXXX');
         $this->addOption('api-base', null, InputOption::VALUE_OPTIONAL, 'URL API Fullmetrix (dev/test)');
+        $this->addOption('store-id', null, InputOption::VALUE_OPTIONAL, 'ID de la vue boutique Magento à connecter');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -44,7 +45,9 @@ class ConnectCommand extends Command
             $output->writeln('<info>API base: ' . $apiBase . '</info>');
         }
 
-        $result = $this->connectionManager->connect((string) $input->getArgument('code'));
+        $storeIdOption = $input->getOption('store-id');
+        $storeId = \is_string($storeIdOption) && ctype_digit($storeIdOption) ? (int) $storeIdOption : null;
+        $result = $this->connectionManager->connect((string) $input->getArgument('code'), $storeId);
         if (!$result['success']) {
             $output->writeln('<error>Connexion echouee: ' . ($result['error'] ?? 'unknown') . '</error>');
 

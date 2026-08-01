@@ -6,6 +6,7 @@ namespace Fullmetrix\Connector\Observer;
 
 use Fullmetrix\Connector\Model\EntitySerializer;
 use Fullmetrix\Connector\Model\WebhookQueue;
+use Fullmetrix\Connector\Model\StoreScope;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Sales\Model\Order\Creditmemo;
@@ -15,13 +16,14 @@ class CreditmemoSaveAfter implements ObserverInterface
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
+        private readonly StoreScope $storeScope,
     ) {
     }
 
     public function execute(Observer $observer): void
     {
         $creditmemo = $observer->getEvent()->getData('creditmemo');
-        if (!$creditmemo instanceof Creditmemo || !$creditmemo->getEntityId()) {
+        if (!$creditmemo instanceof Creditmemo || !$creditmemo->getEntityId() || !$this->storeScope->includesCreditmemo($creditmemo)) {
             return;
         }
         try {

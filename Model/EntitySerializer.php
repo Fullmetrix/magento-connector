@@ -7,7 +7,6 @@ namespace Fullmetrix\Connector\Model;
 use Magento\Catalog\Model\Category;
 use Magento\Catalog\Model\Product;
 use Magento\Catalog\Model\Product\Attribute\Source\Status as ProductStatus;
-use Magento\CatalogInventory\Api\StockRegistryInterface;
 use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Customer\Model\Customer;
 use Magento\Newsletter\Model\SubscriberFactory;
@@ -15,20 +14,26 @@ use Magento\Sales\Model\Order;
 use Magento\Sales\Model\Order\Creditmemo;
 use Magento\Sales\Model\Order\Item as OrderItem;
 use Magento\SalesRule\Model\Rule;
-use Magento\Store\Model\StoreManagerInterface;
+use Magento\SalesRule\Model\Coupon;
+use Magento\SalesRule\Model\RuleFactory;
 
 class EntitySerializer
 {
     private ?array $categoryNameCache = null;
+    private ?array $customerGroupCache = null;
+    private ?array $productSalesCache = null;
+    private array $ruleCache = [];
+    private array $ruleCouponDetailsCache = [];
 
     public function __construct(
-        private readonly StoreManagerInterface $storeManager,
-        private readonly StockRegistryInterface $stockRegistry,
+        private readonly StockProvider $stockProvider,
         private readonly Configurable $configurableType,
         private readonly SubscriberFactory $subscriberFactory,
         private readonly \Magento\Catalog\Model\ResourceModel\Category\CollectionFactory $categoryCollectionFactory,
         private readonly \Magento\Catalog\Model\ProductFactory $productFactory,
         private readonly \Magento\Framework\App\ResourceConnection $resourceConnection,
+        private readonly StoreSettingsProvider $storeSettings,
+        private readonly RuleFactory $ruleFactory,
     ) {
     }
 
@@ -37,6 +42,7 @@ class EntitySerializer
         $billing = $order->getBillingAddress();
         $shipping = $order->getShippingAddress() ?: $billing;
         $payment = $order->getPayment();
+        $baseToOrderRate = (float) $order->getBaseToOrderRate();
 
         $datePaid = null;
         if ((float) $order->getTotalPaid() > 0) {
@@ -64,26 +70,26 @@ class EntitySerializer
         $shippingLines = [];
         $shippingMethod = (string) $order->getShippingMethod();
         if ('' !== $shippingMethod || (float) $order->getShippingAmount() > 0) {
-            $trackingNumber = null;
-            $trackingCarrier = null;
+            $tracks = [];
             foreach ($order->getTracksCollection() as $track) {
-                $trackingNumber = (string) $track->getTrackNumber() ?: null;
-                $trackingCarrier = (string) $track->getTitle() ?: null;
-                break;
+                $tracks[] = $track;
             }
-            $shippingLines[] = [
-                'id' => $shippingMethod ?: 'shipping',
-                'method_title' => (string) $order->getShippingDescription(),
-                'method_id' => $shippingMethod,
-                'total' => $this->money((float) $order->getShippingAmount()),
-                'total_tax' => $this->money((float) $order->getShippingTaxAmount()),
-                'tracking_number' => $trackingNumber,
-                'carrier' => $trackingCarrier,
-            ];
+            $tracks = 0 === \count($tracks) ? [null] : $tracks;
+            foreach ($tracks as $index => $track) {
+                $shippingLines[] = [
+                    'id' => ($shippingMethod ?: 'shipping') . (null !== $track ? ':' . (string) $track->getEntityId() : ''),
+                    'method_title' => (string) $order->getShippingDescription(),
+                    'method_id' => $shippingMethod,
+                    'total' => $this->money(0 === $index ? (float) $order->getShippingAmount() : 0),
+                    'total_tax' => $this->money(0 === $index ? (float) $order->getShippingTaxAmount() : 0),
+                    'tracking_number' => null !== $track ? (string) $track->getTrackNumber() ?: null : null,
+                    'carrier' => null !== $track ? (string) $track->getTitle() ?: null : null,
+                ];
+            }
         }
 
-        $taxLines = [];
-        if ((float) $order->getTaxAmount() > 0) {
+        $taxLines = $this->orderTaxLines((int) $order->getEntityId());
+        if (0 === \count($taxLines) && (float) $order->getTaxAmount() > 0) {
             $taxLines[] = ['total' => $this->money((float) $order->getTaxAmount())];
         }
 
@@ -117,6 +123,9 @@ class EntitySerializer
             'number' => (string) $order->getIncrementId(),
             'status' => (string) ($order->getStatus() ?: $order->getState() ?: 'pending'),
             'currency' => (string) $order->getOrderCurrencyCode(),
+            'base_currency' => (string) $order->getBaseCurrencyCode(),
+            'base_to_order_rate' => $baseToOrderRate > 0 ? $baseToOrderRate : null,
+            'order_to_base_rate' => $baseToOrderRate > 0 ? 1 / $baseToOrderRate : null,
             'total' => $this->money((float) $order->getGrandTotal()),
             'subtotal' => $this->money((float) $order->getSubtotal()),
             'discount_total' => $this->money(abs((float) $order->getDiscountAmount())),
@@ -128,7 +137,15 @@ class EntitySerializer
             'date_completed' => 'complete' === $order->getState() ? $this->iso((string) $order->getUpdatedAt()) : null,
             'customer_id' => $order->getCustomerId() ? (int) $order->getCustomerId() : 0,
             'customer_email' => (string) $order->getCustomerEmail(),
+            'customer_group_id' => (int) $order->getCustomerGroupId(),
+            'customer_group' => $this->customerGroup((int) $order->getCustomerGroupId()),
             'customer_note' => (string) $order->getCustomerNote(),
+            'customer_ip_address' => (string) $order->getRemoteIp() ?: null,
+            'store' => [
+                'id' => (int) $order->getStoreId(),
+                'name' => (string) $order->getStoreName(),
+                'website_id' => (int) $order->getStore()->getWebsiteId(),
+            ],
             'created_via' => $order->getRemoteIp() ? 'checkout' : 'admin',
             'payment_method' => null !== $payment ? (string) $payment->getMethod() : '',
             'payment_method_title' => $payments[0]['method_title'] ?? '',
@@ -167,17 +184,43 @@ class EntitySerializer
             $newsletter = $subscriber->isSubscribed();
         } catch (\Throwable) {
         }
+        if (null === $mainImageUrl) {
+            $imageFile = (string) $product->getImage();
+            if ('' !== $imageFile && 'no_selection' !== $imageFile) {
+                try {
+                    $mediaBase = rtrim((string) $this->storeSettings->getStore()->getBaseUrl(
+                        \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
+                    ), '/');
+                    $mainImageUrl = $mediaBase . '/catalog/product' . $imageFile;
+                    $images[] = [
+                        'id' => 0,
+                        'src' => $mainImageUrl,
+                        'alt' => (string) $product->getName(),
+                        'position' => 0,
+                    ];
+                } catch (\Throwable) {
+                }
+            }
+        }
 
         $payload = [
             'id' => (int) $customer->getId(),
             'email' => (string) $customer->getEmail(),
             'first_name' => (string) $customer->getFirstname(),
             'last_name' => (string) $customer->getLastname(),
+            'prefix' => (string) $customer->getPrefix(),
+            'suffix' => (string) $customer->getSuffix(),
+            'date_of_birth' => $this->iso((string) $customer->getDob()),
+            'vat_number' => (string) $customer->getTaxvat() ?: null,
             'phone' => null !== $billing ? (string) $billing->getTelephone() : null,
             'company' => null !== $billing ? (string) $billing->getCompany() : null,
             'city' => null !== $billing ? (string) $billing->getCity() : null,
             'country' => null !== $billing ? (string) $billing->getCountryId() : null,
             'newsletter' => $newsletter,
+            'customer_group_id' => (int) $customer->getGroupId(),
+            'customer_group' => $this->customerGroup((int) $customer->getGroupId()),
+            'website_id' => (int) $customer->getWebsiteId(),
+            'store_id' => (int) $customer->getStoreId(),
             'date_created' => $this->iso((string) $customer->getCreatedAt()),
             'date_modified' => $this->iso((string) $customer->getUpdatedAt()),
         ];
@@ -195,20 +238,19 @@ class EntitySerializer
 
     public function serializeProduct(Product $product): array
     {
+        $product->setStoreId($this->storeSettings->getStoreId());
+        $product->unsetData('final_price');
         $parentId = $this->parentIdForChild((int) $product->getId());
         $isVariation = null !== $parentId;
 
-        $stockItem = null;
-        try {
-            $stockItem = $this->stockRegistry->getStockItem((int) $product->getId());
-        } catch (\Throwable) {
-        }
+        $stock = $this->stockProvider->get($product);
 
-        $categoryIds = array_values(array_map('intval', $product->getCategoryIds() ?: []));
+        $categoryIds = [];
         $categories = [];
-        foreach ($categoryIds as $categoryId) {
+        foreach (array_values(array_map('intval', $product->getCategoryIds() ?: [])) as $categoryId) {
             $name = $this->categoryName($categoryId);
             if (null !== $name) {
+                $categoryIds[] = $categoryId;
                 $categories[] = ['id' => $categoryId, 'name' => $name];
             }
         }
@@ -216,7 +258,7 @@ class EntitySerializer
         $images = [];
         $mainImageUrl = null;
         try {
-            $mediaBase = rtrim((string) $this->storeManager->getStore()->getBaseUrl(
+            $mediaBase = rtrim((string) $this->storeSettings->getStore()->getBaseUrl(
                 \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
             ), '/');
             $galleryImages = $product->getMediaGalleryEntries() ?? [];
@@ -240,12 +282,11 @@ class EntitySerializer
         }
 
         $price = (float) $product->getPrice();
-        $specialPrice = null !== $product->getSpecialPrice() && '' !== (string) $product->getSpecialPrice()
-            ? (float) $product->getSpecialPrice()
-            : null;
-        $finalPrice = null !== $specialPrice && $specialPrice > 0 && ($specialPrice < $price || 0.0 === $price)
-            ? $specialPrice
-            : $price;
+        $finalPrice = (float) $product->getFinalPrice();
+        if ($finalPrice <= 0 && $price > 0) {
+            $finalPrice = $price;
+        }
+        $salePrice = $finalPrice > 0 && ($finalPrice < $price || 0.0 === $price) ? $finalPrice : null;
 
         $attributes = [];
         if ($isVariation) {
@@ -273,12 +314,12 @@ class EntitySerializer
 
         $urlKey = (string) $product->getUrlKey();
         $permalink = '';
-        if ('' !== $urlKey) {
-            try {
-                $permalink = rtrim((string) $this->storeManager->getStore()->getBaseUrl(), '/') . '/' . $urlKey . '.html';
-            } catch (\Throwable) {
-            }
+        try {
+            $permalink = (string) $product->getProductUrl();
+        } catch (\Throwable) {
         }
+
+        $ean = $this->firstAttributeValue($product, ['ean', 'ean13', 'gtin']);
 
         return [
             'id' => (int) $product->getId(),
@@ -293,14 +334,30 @@ class EntitySerializer
             'short_description' => (string) $product->getData('short_description'),
             'price' => $this->money($finalPrice),
             'regular_price' => $this->money($price),
-            'sale_price' => null !== $specialPrice ? $this->money($specialPrice) : null,
-            'on_sale' => null !== $specialPrice && $specialPrice > 0 && $specialPrice < $price,
+            'sale_price' => null !== $salePrice ? $this->money($salePrice) : null,
+            'on_sale' => null !== $salePrice,
             'date_on_sale_from' => $this->iso((string) $product->getSpecialFromDate()),
             'date_on_sale_to' => $this->iso((string) $product->getSpecialToDate()),
-            'stock_status' => null !== $stockItem && $stockItem->getIsInStock() ? 'instock' : 'outofstock',
-            'stock_quantity' => null !== $stockItem ? (int) $stockItem->getQty() : null,
-            'manage_stock' => null !== $stockItem && (bool) $stockItem->getManageStock(),
+            'stock_status' => $stock['status'],
+            'stock_quantity' => $stock['quantity'],
+            'manage_stock' => $stock['manage'],
             'weight' => null !== $product->getWeight() ? (string) $product->getWeight() : null,
+            'length' => $this->firstAttributeValue($product, ['length']),
+            'width' => $this->firstAttributeValue($product, ['width']),
+            'height' => $this->firstAttributeValue($product, ['height']),
+            'wholesale_price' => $this->nullableMoney($product->getData('cost')),
+            'ean' => $ean,
+            'ean13' => $ean,
+            'upc' => $this->firstAttributeValue($product, ['upc']),
+            'isbn' => $this->firstAttributeValue($product, ['isbn']),
+            'mpn' => $this->firstAttributeValue($product, ['mpn', 'manufacturer_part_number']),
+            'condition' => $this->firstAttributeValue($product, ['condition']),
+            'color' => $this->firstAttributeValue($product, ['color']),
+            'size' => $this->firstAttributeValue($product, ['size']),
+            'material' => $this->firstAttributeValue($product, ['material']),
+            'supplier_name' => $this->firstAttributeValue($product, ['supplier_name', 'supplier']),
+            'supplier_reference' => $this->firstAttributeValue($product, ['supplier_reference', 'supplier_sku']),
+            'tax_class' => (string) $product->getTaxClassId(),
             'brand' => $brand,
             'manufacturer_name' => $brand,
             'category_ids' => $categoryIds,
@@ -308,8 +365,9 @@ class EntitySerializer
             'images' => $images,
             'image_url' => $mainImageUrl,
             'attributes' => $attributes,
+            'features' => $this->productFeatures($product),
             'tags' => [],
-            'total_sales' => 0,
+            'total_sales' => $this->productSales((int) $product->getId()),
             'date_created' => $this->iso((string) $product->getCreatedAt()),
             'date_modified' => $this->iso((string) $product->getUpdatedAt()),
         ];
@@ -318,58 +376,65 @@ class EntitySerializer
     public function serializeCategory(Category $category): array
     {
         $parentId = (int) $category->getParentId();
+        $rootCategoryId = $this->storeSettings->getRootCategoryId();
+        $imageUrl = null;
+        $image = trim((string) $category->getImage());
+        if ('' !== $image) {
+            try {
+                $mediaBase = rtrim((string) $this->storeSettings->getStore()->getBaseUrl(
+                    \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
+                ), '/');
+                $imageUrl = $mediaBase . '/catalog/category/' . ltrim($image, '/');
+            } catch (\Throwable) {
+            }
+        }
 
         return [
             'id' => (int) $category->getId(),
             'name' => (string) $category->getName(),
             'slug' => (string) $category->getUrlKey(),
-            'parent_id' => $parentId > 2 ? $parentId : null,
+            'parent_id' => $parentId > 0 && $parentId !== $rootCategoryId ? $parentId : null,
             'description' => (string) $category->getData('description'),
             'count' => (int) $category->getProductCount(),
+            'image_url' => $imageUrl,
             'position' => (int) $category->getPosition(),
             'date_created' => $this->iso((string) $category->getCreatedAt()),
             'date_modified' => $this->iso((string) $category->getUpdatedAt()),
         ];
     }
 
-    public function serializeCoupon(Rule $rule): array
+    public function serializeCoupon(Rule|Coupon $source): array
     {
-        $primaryCoupon = $rule->getPrimaryCoupon();
-        $code = (string) ($primaryCoupon ? $primaryCoupon->getCode() : '');
+        $coupon = $source instanceof Coupon ? $source : $source->getPrimaryCoupon();
+        $rule = $source instanceof Rule ? $source : $this->ruleForCoupon($source);
+        $code = (string) ($coupon ? $coupon->getCode() : '');
+        $couponId = $coupon ? (int) $coupon->getCouponId() : 0;
+        $externalId = $coupon && !(bool) $coupon->getIsPrimary()
+            ? (string) $rule->getRuleId() . ':' . $couponId
+            : (int) $rule->getRuleId();
 
-        $discountType = match ((string) $rule->getSimpleAction()) {
-            'by_percent' => 'percent',
-            'cart_fixed' => 'fixed_cart',
-            'by_fixed' => 'fixed_product',
-            default => 'percent',
-        };
-
-        $minimumAmount = null;
-        try {
-            $conditions = $rule->getConditions()->asArray();
-            foreach ($conditions['conditions'] ?? [] as $condition) {
-                if (('base_subtotal' === ($condition['attribute'] ?? '') || 'base_subtotal_total_incl_tax' === ($condition['attribute'] ?? ''))
-                    && \in_array($condition['operator'] ?? '', ['>=', '>'], true)) {
-                    $minimumAmount = (string) $condition['value'];
-                }
-            }
-        } catch (\Throwable) {
-        }
+        $details = $this->ruleCouponDetails($rule);
 
         return [
-            'id' => (int) $rule->getRuleId(),
+            'id' => $externalId,
             'code' => $code,
             'description' => (string) $rule->getName(),
-            'discount_type' => $discountType,
+            'discount_type' => $details['discount_type'],
             'amount' => $this->money((float) $rule->getDiscountAmount()),
-            'usage_count' => $primaryCoupon ? (int) $primaryCoupon->getTimesUsed() : 0,
-            'usage_limit' => $rule->getUsesPerCoupon() ? (int) $rule->getUsesPerCoupon() : null,
-            'usage_limit_per_user' => $rule->getUsesPerCustomer() ? (int) $rule->getUsesPerCustomer() : null,
+            'usage_count' => $coupon ? (int) $coupon->getTimesUsed() : 0,
+            'usage_limit' => $coupon && $coupon->getUsageLimit() ? (int) $coupon->getUsageLimit() : ($rule->getUsesPerCoupon() ? (int) $rule->getUsesPerCoupon() : null),
+            'usage_limit_per_user' => $coupon && $coupon->getUsagePerCustomer() ? (int) $coupon->getUsagePerCustomer() : ($rule->getUsesPerCustomer() ? (int) $rule->getUsesPerCustomer() : null),
             'individual_use' => (bool) $rule->getDiscardSubsequentRules(),
             'exclude_sale_items' => false,
             'free_shipping' => \in_array((string) $rule->getSimpleFreeShipping(), ['1', '2'], true),
-            'minimum_amount' => $minimumAmount,
-            'date_created' => $this->iso((string) $rule->getFromDate()) ?? $this->iso(date('Y-m-d H:i:s')),
+            'minimum_amount' => $details['minimum_amount'],
+            'maximum_amount' => $details['maximum_amount'],
+            'product_ids' => $details['product_ids'],
+            'excluded_product_ids' => $details['excluded_product_ids'],
+            'product_categories' => $details['product_categories'],
+            'excluded_product_categories' => $details['excluded_product_categories'],
+            'date_created' => $coupon ? $this->iso((string) $coupon->getCreatedAt()) : null,
+            'date_starts' => $this->iso((string) $rule->getFromDate()),
             'date_expires' => $this->iso((string) $rule->getToDate()),
             'status' => (bool) $rule->getIsActive() ? 'publish' : 'draft',
         ];
@@ -384,9 +449,18 @@ class EntitySerializer
             if (null !== $orderItem && null !== $orderItem->getParentItemId()) {
                 continue;
             }
+            $parentProductId = (int) $item->getProductId();
+            $productId = $parentProductId;
+            if (null !== $orderItem && 'configurable' === $orderItem->getProductType()) {
+                foreach ($orderItem->getChildrenItems() as $child) {
+                    $productId = (int) $child->getProductId();
+                    break;
+                }
+            }
             $lineItems[] = [
                 'id' => (int) $item->getEntityId(),
-                'product_id' => (int) $item->getProductId(),
+                'product_id' => $productId,
+                'parent_id' => $productId !== $parentProductId ? $parentProductId : null,
                 'sku' => (string) $item->getSku(),
                 'name' => (string) $item->getName(),
                 'quantity' => (float) $item->getQty(),
@@ -426,6 +500,14 @@ class EntitySerializer
             }
             $rowTotal = (float) $item->getRowTotal();
             $discount = (float) $item->getDiscountAmount();
+            $metaData = [];
+            $productOptions = $item->getProductOptions();
+            foreach ($productOptions['attributes_info'] ?? [] as $attribute) {
+                $metaData[] = [
+                    'key' => (string) ($attribute['label'] ?? ''),
+                    'value' => (string) ($attribute['value'] ?? ''),
+                ];
+            }
 
             $items[] = [
                 'id' => (int) $item->getItemId(),
@@ -439,10 +521,60 @@ class EntitySerializer
                 'total' => $this->money(max(0, $rowTotal - $discount)),
                 'discount' => $this->money($discount),
                 'total_tax' => $this->money((float) $item->getTaxAmount()),
+                'tax_rate' => (float) $item->getTaxPercent(),
+                'meta_data' => $metaData,
             ];
         }
 
         return $items;
+    }
+
+    private function orderTaxLines(int $orderId): array
+    {
+        if ($orderId <= 0) {
+            return [];
+        }
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $select = $connection->select()->from(
+                $this->resourceConnection->getTableName('sales_order_tax'),
+                ['tax_id', 'code', 'title', 'percent', 'amount', 'priority']
+            )->where('order_id = ?', $orderId)->order('priority ASC');
+            $shippingSelect = $connection->select()->from(
+                ['tax_item' => $this->resourceConnection->getTableName('sales_order_tax_item')],
+                [
+                    'tax_id',
+                    'shipping_amount' => new \Zend_Db_Expr('SUM(tax_item.real_amount)'),
+                ]
+            )->joinInner(
+                ['tax' => $this->resourceConnection->getTableName('sales_order_tax')],
+                'tax.tax_id = tax_item.tax_id',
+                []
+            )->where('tax.order_id = ?', $orderId)
+                ->where('tax_item.taxable_item_type = ?', 'shipping')
+                ->group('tax_item.tax_id');
+            $shippingByTaxId = [];
+            foreach ($connection->fetchAll($shippingSelect) as $row) {
+                $shippingByTaxId[(int) $row['tax_id']] = (float) $row['shipping_amount'];
+            }
+
+            return array_map(function (array $row) use ($shippingByTaxId): array {
+                $shippingAmount = $shippingByTaxId[(int) $row['tax_id']] ?? 0.0;
+
+                return [
+                    'id' => (int) $row['tax_id'],
+                    'rate_id' => (string) $row['tax_id'],
+                    'rate_code' => (string) $row['code'],
+                    'label' => (string) $row['title'],
+                    'rate_percent' => (float) $row['percent'],
+                    'tax_total' => $this->money(max(0, (float) $row['amount'] - $shippingAmount)),
+                    'shipping_tax_total' => $this->money($shippingAmount),
+                    'compound' => false,
+                ];
+            }, $connection->fetchAll($select));
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     private function address(?\Magento\Sales\Api\Data\OrderAddressInterface $address, string $fallbackEmail = ''): ?array
@@ -456,6 +588,7 @@ class EntitySerializer
             'first_name' => (string) $address->getFirstname(),
             'last_name' => (string) $address->getLastname(),
             'company' => (string) $address->getCompany(),
+            'vat_number' => (string) $address->getVatId(),
             'address_1' => (string) ($street[0] ?? ''),
             'address_2' => (string) ($street[1] ?? ''),
             'city' => (string) $address->getCity(),
@@ -478,6 +611,7 @@ class EntitySerializer
             'first_name' => (string) $address->getFirstname(),
             'last_name' => (string) $address->getLastname(),
             'company' => (string) $address->getCompany(),
+            'vat_number' => (string) $address->getVatId(),
             'address_1' => (string) ($street[0] ?? ''),
             'address_2' => (string) ($street[1] ?? ''),
             'city' => (string) $address->getCity(),
@@ -521,6 +655,7 @@ class EntitySerializer
             return $this->parentStubCache['product'];
         }
         $product = $this->productFactory->create();
+        $product->setStoreId($this->storeSettings->getStoreId());
         $product->getResource()->load($product, $parentId);
         $this->parentStubCache = ['id' => $parentId, 'product' => $product];
 
@@ -531,19 +666,18 @@ class EntitySerializer
 
     private function parentIdForChild(int $productId): ?int
     {
-        if (null === $this->parentByChildCache) {
-            $this->parentByChildCache = [];
+        $this->parentByChildCache ??= [];
+        if (!\array_key_exists($productId, $this->parentByChildCache)) {
+            $this->parentByChildCache[$productId] = null;
             try {
                 $connection = $this->resourceConnection->getConnection();
                 $select = $connection->select()->from(
                     $this->resourceConnection->getTableName('catalog_product_super_link'),
-                    ['product_id', 'parent_id']
-                );
-                foreach ($connection->fetchAll($select) as $row) {
-                    $childId = (int) $row['product_id'];
-                    if (!isset($this->parentByChildCache[$childId])) {
-                        $this->parentByChildCache[$childId] = (int) $row['parent_id'];
-                    }
+                    ['parent_id']
+                )->where('product_id = ?', $productId)->limit(1);
+                $parentId = $connection->fetchOne($select);
+                if (false !== $parentId) {
+                    $this->parentByChildCache[$productId] = (int) $parentId;
                 }
             } catch (\Throwable) {
             }
@@ -558,7 +692,9 @@ class EntitySerializer
             $this->categoryNameCache = [];
             try {
                 $collection = $this->categoryCollectionFactory->create();
+                $collection->setStoreId($this->storeSettings->getStoreId());
                 $collection->addAttributeToSelect('name');
+                $collection->addFieldToFilter('path', ['like' => '1/' . $this->storeSettings->getRootCategoryId() . '/%']);
                 foreach ($collection as $category) {
                     $this->categoryNameCache[(int) $category->getId()] = (string) $category->getName();
                 }
@@ -567,6 +703,238 @@ class EntitySerializer
         }
 
         return $this->categoryNameCache[$categoryId] ?? null;
+    }
+
+    private function customerGroup(int $groupId): string
+    {
+        if (null === $this->customerGroupCache) {
+            $this->customerGroupCache = [];
+            try {
+                $connection = $this->resourceConnection->getConnection();
+                $select = $connection->select()->from(
+                    $this->resourceConnection->getTableName('customer_group'),
+                    ['customer_group_id', 'customer_group_code']
+                );
+                foreach ($connection->fetchAll($select) as $row) {
+                    $this->customerGroupCache[(int) $row['customer_group_id']] = (string) $row['customer_group_code'];
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return $this->customerGroupCache[$groupId] ?? '';
+    }
+
+    private function productSales(int $productId): float
+    {
+        if (null === $this->productSalesCache) {
+            $this->productSalesCache = [];
+            try {
+                $connection = $this->resourceConnection->getConnection();
+                $select = $connection->select()->from(
+                    ['item' => $this->resourceConnection->getTableName('sales_order_item')],
+                    [
+                        'product_id',
+                        'total_sales' => new \Zend_Db_Expr('SUM(GREATEST(item.qty_ordered - item.qty_canceled - item.qty_refunded, 0))'),
+                    ]
+                )->joinInner(
+                    ['orders' => $this->resourceConnection->getTableName('sales_order')],
+                    'orders.entity_id = item.order_id',
+                    []
+                )->where('orders.store_id = ?', $this->storeSettings->getStoreId())
+                    ->where('item.product_id IS NOT NULL')
+                    ->group('item.product_id');
+                foreach ($connection->fetchAll($select) as $row) {
+                    $this->productSalesCache[(int) $row['product_id']] = (float) $row['total_sales'];
+                }
+            } catch (\Throwable) {
+            }
+        }
+
+        return $this->productSalesCache[$productId] ?? 0.0;
+    }
+
+    private function productFeatures(Product $product): array
+    {
+        $features = [];
+        foreach ($product->getAttributes() as $attribute) {
+            if (!$attribute->getIsUserDefined()) {
+                continue;
+            }
+            $label = trim((string) $attribute->getStoreLabel($this->storeSettings->getStoreId()));
+            if ('' === $label) {
+                continue;
+            }
+            try {
+                $value = $attribute->getFrontend()->getValue($product);
+            } catch (\Throwable) {
+                continue;
+            }
+            if (\is_array($value)) {
+                $value = implode(', ', array_filter(array_map('strval', $value)));
+            }
+            $value = trim((string) $value);
+            if ('' === $value) {
+                continue;
+            }
+            $features[] = ['name' => $label, 'value' => $value];
+        }
+
+        return $features;
+    }
+
+    private function couponProductRestrictions(Rule $rule): array
+    {
+        $includedSkus = [];
+        $excludedSkus = [];
+        $includedCategories = [];
+        $excludedCategories = [];
+        try {
+            foreach ($this->flattenConditions($rule->getActions()->asArray()) as $condition) {
+                $attribute = (string) ($condition['attribute'] ?? '');
+                $operator = (string) ($condition['operator'] ?? '');
+                $values = array_values(array_filter(array_map('trim', explode(',', (string) ($condition['value'] ?? '')))));
+                if ('sku' === $attribute) {
+                    foreach ($values as $value) {
+                        if ('!()' === $operator) {
+                            $excludedSkus[$value] = true;
+                        } else {
+                            $includedSkus[$value] = true;
+                        }
+                    }
+                }
+                if ('category_ids' === $attribute) {
+                    foreach ($values as $value) {
+                        $categoryId = (int) $value;
+                        if ($categoryId > 0) {
+                            if ('!()' === $operator) {
+                                $excludedCategories[$categoryId] = true;
+                            } else {
+                                $includedCategories[$categoryId] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        return [
+            'product_ids' => $this->productIdsForSkus(array_keys($includedSkus)),
+            'excluded_product_ids' => $this->productIdsForSkus(array_keys($excludedSkus)),
+            'product_categories' => array_map('intval', array_keys($includedCategories)),
+            'excluded_product_categories' => array_map('intval', array_keys($excludedCategories)),
+        ];
+    }
+
+    private function ruleCouponDetails(Rule $rule): array
+    {
+        $ruleId = (int) $rule->getRuleId();
+        if (isset($this->ruleCouponDetailsCache[$ruleId])) {
+            return $this->ruleCouponDetailsCache[$ruleId];
+        }
+
+        $minimumAmount = null;
+        $maximumAmount = null;
+        try {
+            foreach ($this->flattenConditions($rule->getConditions()->asArray()) as $condition) {
+                $attribute = (string) ($condition['attribute'] ?? '');
+                $operator = (string) ($condition['operator'] ?? '');
+                if (\in_array($attribute, ['base_subtotal', 'base_subtotal_total_incl_tax'], true)
+                    && \in_array($operator, ['>=', '>'], true)) {
+                    $minimumAmount = (string) $condition['value'];
+                }
+                if (\in_array($attribute, ['base_subtotal', 'base_subtotal_total_incl_tax'], true)
+                    && \in_array($operator, ['<=', '<'], true)) {
+                    $maximumAmount = (string) $condition['value'];
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        $details = [
+            'discount_type' => match ((string) $rule->getSimpleAction()) {
+                'by_percent' => 'percent',
+                'cart_fixed' => 'fixed_cart',
+                'by_fixed' => 'fixed_product',
+                default => 'percent',
+            },
+            'minimum_amount' => $minimumAmount,
+            'maximum_amount' => $maximumAmount,
+            ...$this->couponProductRestrictions($rule),
+        ];
+        $this->ruleCouponDetailsCache[$ruleId] = $details;
+
+        return $details;
+    }
+
+    private function ruleForCoupon(Coupon $coupon): Rule
+    {
+        $ruleId = (int) $coupon->getRuleId();
+        if (!isset($this->ruleCache[$ruleId])) {
+            $this->ruleCache[$ruleId] = $this->ruleFactory->create()->load($ruleId);
+        }
+
+        return $this->ruleCache[$ruleId];
+    }
+
+    private function productIdsForSkus(array $skus): array
+    {
+        if (0 === \count($skus)) {
+            return [];
+        }
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $select = $connection->select()->from(
+                $this->resourceConnection->getTableName('catalog_product_entity'),
+                ['entity_id']
+            )->where('sku IN (?)', $skus);
+
+            return array_values(array_map('intval', $connection->fetchCol($select)));
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    private function flattenConditions(array $condition): array
+    {
+        $result = [];
+        foreach ($condition['conditions'] ?? [] as $child) {
+            if (!\is_array($child)) {
+                continue;
+            }
+            $result[] = $child;
+            $result = array_merge($result, $this->flattenConditions($child));
+        }
+
+        return $result;
+    }
+
+    private function firstAttributeValue(Product $product, array $codes): ?string
+    {
+        foreach ($codes as $code) {
+            try {
+                $value = $product->getAttributeText($code);
+            } catch (\Throwable) {
+                $value = null;
+            }
+            if (\is_array($value)) {
+                $value = implode(', ', array_filter(array_map('strval', $value)));
+            }
+            if (null === $value || '' === trim((string) $value)) {
+                $value = $product->getData($code);
+            }
+            if (null !== $value && '' !== trim((string) $value)) {
+                return trim((string) $value);
+            }
+        }
+
+        return null;
+    }
+
+    private function nullableMoney(mixed $value): ?string
+    {
+        return null === $value || '' === trim((string) $value) ? null : $this->money($value);
     }
 
     private function money(float|int|string|null $value): string

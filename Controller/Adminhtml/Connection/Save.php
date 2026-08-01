@@ -23,7 +23,8 @@ class Save extends Action
     public function execute(): Redirect
     {
         $code = (string) $this->getRequest()->getParam('connection_code', '');
-        $result = $this->connectionManager->connect($code);
+        $storeId = (int) $this->getRequest()->getParam('store_id', 0);
+        $result = $this->connectionManager->connect($code, $storeId > 0 ? $storeId : null);
 
         if ($result['success']) {
             $this->messageManager->addSuccessMessage(__('Boutique connectée à Fullmetrix. La synchronisation démarre automatiquement.'));

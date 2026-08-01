@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="fullmetrix_webhook_queue" resource="default" engine="innodb" comment="Fullmetrix Webhook Queue">
+        <column xsi:type="int" name="queue_id" unsigned="true" nullable="false" identity="true" comment="Queue ID"/>
+        <column xsi:type="varchar" name="entity_type" nullable="false" length="32" comment="Entity Type"/>
+        <column xsi:type="varchar" name="entity_id" nullable="false" length="128" comment="Entity ID"/>
+        <column xsi:type="varchar" name="event" nullable="false" length="64" comment="Event"/>
+        <column xsi:type="text" name="payload" nullable="false" length="2M" comment="Payload"/>
+        <column xsi:type="smallint" name="attempts" unsigned="true" nullable="false" default="0" comment="Attempts"/>
+        <column xsi:type="timestamp" name="available_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="false" comment="Available At"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="false" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="queue_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="FULLMETRIX_WEBHOOK_QUEUE_ENTITY">
+            <column name="entity_type"/>
+            <column name="entity_id"/>
+        </constraint>
+        <index referenceId="FULLMETRIX_WEBHOOK_QUEUE_AVAILABLE_AT" indexType="btree">
+            <column name="available_at"/>
+        </index>
+    </table>
+</schema>

@@ -9,4 +9,13 @@
             </argument>
         </arguments>
     </type>
+    <type name="Magento\InventoryApi\Api\SourceItemsSaveInterface">
+        <plugin name="fullmetrix_inventory_source_items_save" type="Fullmetrix\Connector\Plugin\InventorySourceItemsSavePlugin" sortOrder="1000"/>
+    </type>
+    <type name="Magento\InventorySales\Model\PlaceReservationsForSalesEvent">
+        <plugin name="fullmetrix_inventory_reservations" type="Fullmetrix\Connector\Plugin\InventoryReservationPlugin" sortOrder="1000"/>
+    </type>
+    <type name="Magento\CatalogRule\Model\Indexer\Rule\RuleProductIndexer">
+        <plugin name="fullmetrix_catalog_rule_indexer" type="Fullmetrix\Connector\Plugin\CatalogRuleIndexerPlugin" sortOrder="1000"/>
+    </type>
 </config>

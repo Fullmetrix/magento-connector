@@ -9,8 +9,7 @@ use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductColl
 use Magento\Customer\Model\ResourceModel\Customer\CollectionFactory as CustomerCollectionFactory;
 use Magento\Sales\Model\ResourceModel\Order\CollectionFactory as OrderCollectionFactory;
 use Magento\Sales\Model\ResourceModel\Order\Creditmemo\CollectionFactory as CreditmemoCollectionFactory;
-use Magento\SalesRule\Model\ResourceModel\Rule\CollectionFactory as RuleCollectionFactory;
-use Magento\SalesRule\Model\Rule;
+use Magento\SalesRule\Model\ResourceModel\Coupon\CollectionFactory as CouponCollectionFactory;
 
 class EntityPaginator
 {
@@ -21,8 +20,10 @@ class EntityPaginator
         private readonly CustomerCollectionFactory $customerCollectionFactory,
         private readonly ProductCollectionFactory $productCollectionFactory,
         private readonly CategoryCollectionFactory $categoryCollectionFactory,
-        private readonly RuleCollectionFactory $ruleCollectionFactory,
+        private readonly CouponCollectionFactory $couponCollectionFactory,
         private readonly CreditmemoCollectionFactory $creditmemoCollectionFactory,
+        private readonly StoreSettingsProvider $storeSettings,
+        private readonly Config $config,
     ) {
     }
 
@@ -103,19 +104,20 @@ class EntityPaginator
     private function buildCollection(string $entity, ?string $since): ?object
     {
         $collection = match ($entity) {
-            'orders' => $this->orderCollectionFactory->create(),
-            'customers' => $this->customerCollectionFactory->create()->addAttributeToSelect('*'),
+            'orders' => $this->buildOrderCollection(),
+            'customers' => $this->buildCustomerCollection(),
             'products' => $this->buildProductCollection(),
             'categories' => $this->buildCategoryCollection(),
             'coupons' => $this->buildCouponCollection(),
-            'refunds' => $this->creditmemoCollectionFactory->create(),
+            'refunds' => $this->buildRefundCollection(),
             default => null,
         };
         if (null === $collection) {
             return null;
         }
 
-        if (null !== $since && '' !== $since) {
+        $skipSince = 'products' === $entity && $this->config->shouldRefreshAllProducts();
+        if (!$skipSince && null !== $since && '' !== $since) {
             $updatedField = $this->updatedField($entity);
             if (null !== $updatedField) {
                 try {
@@ -134,8 +136,9 @@ class EntityPaginator
     private function buildProductCollection(): object
     {
         $collection = $this->productCollectionFactory->create();
-        $collection->setStoreId(0);
+        $collection->setStoreId($this->storeSettings->getStoreId());
         $collection->addAttributeToSelect('*');
+        $collection->addWebsiteFilter($this->storeSettings->getWebsiteId());
         $collection->setFlag('has_stock_status_filter', true);
 
         return $collection;
@@ -144,24 +147,49 @@ class EntityPaginator
     private function buildCategoryCollection(): object
     {
         $collection = $this->categoryCollectionFactory->create();
+        $collection->setStoreId($this->storeSettings->getStoreId());
         $collection->addAttributeToSelect('*');
         $collection->addFieldToFilter('level', ['gteq' => 2]);
+        $collection->addFieldToFilter('path', ['like' => '1/' . $this->storeSettings->getRootCategoryId() . '/%']);
 
         return $collection;
     }
 
     private function buildCouponCollection(): object
     {
-        $collection = $this->ruleCollectionFactory->create();
-        $collection->addFieldToFilter('coupon_type', ['neq' => Rule::COUPON_TYPE_NO_COUPON]);
+        $collection = $this->couponCollectionFactory->create();
+        $collection->getSelect()->joinInner(
+            ['fullmetrix_rule_website' => $collection->getTable('salesrule_website')],
+            'main_table.rule_id = fullmetrix_rule_website.rule_id',
+            []
+        )->where('fullmetrix_rule_website.website_id = ?', $this->storeSettings->getWebsiteId());
 
         return $collection;
+    }
+
+    private function buildOrderCollection(): object
+    {
+        return $this->orderCollectionFactory->create()
+            ->addFieldToFilter('store_id', $this->storeSettings->getStoreId());
+    }
+
+    private function buildCustomerCollection(): object
+    {
+        return $this->customerCollectionFactory->create()
+            ->addAttributeToSelect('*')
+            ->addFieldToFilter('website_id', $this->storeSettings->getWebsiteId());
+    }
+
+    private function buildRefundCollection(): object
+    {
+        return $this->creditmemoCollectionFactory->create()
+            ->addFieldToFilter('store_id', $this->storeSettings->getStoreId());
     }
 
     private function idField(string $entity): string
     {
         return match ($entity) {
-            'coupons' => 'rule_id',
+            'coupons' => 'coupon_id',
             default => 'entity_id',
         };
     }
@@ -170,7 +198,7 @@ class EntityPaginator
     {
         return match ($entity) {
             'orders', 'products', 'customers', 'categories', 'refunds' => 'updated_at',
-            'coupons' => null,
+            'coupons' => 'created_at',
             default => null,
         };
     }

@@ -17,14 +17,14 @@ class ApiClient
     ) {
     }
 
-    public function register(string $connectionCode, string $siteUrl): array
+    public function register(string $connectionCode, string $siteUrl, ?int $storeId = null): array
     {
         $payload = json_encode([
             'connectionCode' => $connectionCode,
             'siteUrl' => $siteUrl,
             'pluginVersion' => Config::VERSION,
             'platform' => 'magento',
-            'storeSettings' => $this->storeSettings->getSettings(),
+            'storeSettings' => $this->storeSettings->getSettings($storeId),
         ], \JSON_UNESCAPED_SLASHES) ?: '{}';
 
         $response = $this->httpClient->postJson(

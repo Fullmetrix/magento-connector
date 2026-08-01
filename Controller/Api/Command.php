@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Fullmetrix\Connector\Controller\Api;
 
 use Fullmetrix\Connector\Model\Config;
-use Fullmetrix\Connector\Model\CouponCommandHandler;
+use Fullmetrix\Connector\Model\ConnectorCommandHandler;
 use Fullmetrix\Connector\Model\EntityPaginator;
 use Fullmetrix\Connector\Model\EntitySerializer;
 use Fullmetrix\Connector\Model\HmacRequestVerifier;
@@ -25,7 +25,7 @@ class Command extends AbstractApiAction implements HttpPostActionInterface, Csrf
         EntityPaginator $paginator,
         EntitySerializer $serializer,
         Config $config,
-        private readonly CouponCommandHandler $couponCommandHandler,
+        private readonly ConnectorCommandHandler $commandHandler,
     ) {
         parent::__construct($request, $jsonFactory, $verifier, $paginator, $serializer, $config);
     }
@@ -45,7 +45,7 @@ class Command extends AbstractApiAction implements HttpPostActionInterface, Csrf
         $action = (string) $decoded['action'];
         $payload = \is_array($decoded['payload'] ?? null) ? $decoded['payload'] : [];
 
-        $result = $this->couponCommandHandler->handle($action, $payload);
+        $result = $this->commandHandler->handle($action, $payload);
 
         return $this->json($result, $result['success'] ? 200 : 400);
     }

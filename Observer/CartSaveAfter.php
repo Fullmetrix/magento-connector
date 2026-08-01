@@ -6,6 +6,7 @@ namespace Fullmetrix\Connector\Observer;
 
 use Fullmetrix\Connector\Model\CartSerializer;
 use Fullmetrix\Connector\Model\TrackingQueue;
+use Fullmetrix\Connector\Model\StoreScope;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Quote\Model\Quote;
@@ -15,6 +16,7 @@ class CartSaveAfter implements ObserverInterface
     public function __construct(
         private readonly TrackingQueue $trackingQueue,
         private readonly CartSerializer $cartSerializer,
+        private readonly StoreScope $storeScope,
     ) {
     }
 
@@ -22,7 +24,7 @@ class CartSaveAfter implements ObserverInterface
     {
         $cart = $observer->getEvent()->getData('cart');
         $quote = null !== $cart && method_exists($cart, 'getQuote') ? $cart->getQuote() : null;
-        if (!$quote instanceof Quote || !$quote->getId()) {
+        if (!$quote instanceof Quote || !$quote->getId() || !$this->storeScope->includesQuote($quote)) {
             return;
         }
         try {

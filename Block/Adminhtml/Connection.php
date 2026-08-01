@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Fullmetrix\Connector\Block\Adminhtml;
 
 use Fullmetrix\Connector\Model\Config;
+use Fullmetrix\Connector\Model\StoreSettingsProvider;
 use Magento\Backend\Block\Template;
 use Magento\Backend\Block\Template\Context;
 
@@ -13,6 +14,7 @@ class Connection extends Template
     public function __construct(
         Context $context,
         private readonly Config $config,
+        private readonly StoreSettingsProvider $storeSettings,
         array $data = [],
     ) {
         parent::__construct($context, $data);
@@ -41,5 +43,15 @@ class Connection extends Template
     public function getAppUrl(): string
     {
         return $this->config->getAppOrigin();
+    }
+
+    public function getAvailableStores(): array
+    {
+        return $this->storeSettings->getAvailableStores();
+    }
+
+    public function getConnectedStoreLabel(): string
+    {
+        return (string) $this->storeSettings->getStore()->getName();
     }
 }

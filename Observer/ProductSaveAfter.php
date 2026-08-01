@@ -6,6 +6,7 @@ namespace Fullmetrix\Connector\Observer;
 
 use Fullmetrix\Connector\Model\EntitySerializer;
 use Fullmetrix\Connector\Model\WebhookQueue;
+use Fullmetrix\Connector\Model\StoreScope;
 use Magento\Catalog\Model\Product;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
@@ -15,6 +16,7 @@ class ProductSaveAfter implements ObserverInterface
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
+        private readonly StoreScope $storeScope,
     ) {
     }
 
@@ -25,6 +27,10 @@ class ProductSaveAfter implements ObserverInterface
             return;
         }
         try {
+            if (!$this->storeScope->includesProduct($product)) {
+                $this->webhookQueue->enqueueDeleted('product', (int) $product->getId());
+                return;
+            }
             $this->webhookQueue->enqueue('product', (int) $product->getId(), $this->serializer->serializeProduct($product), 'product.updated');
         } catch (\Throwable) {
         }
