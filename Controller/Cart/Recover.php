@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Fullmetrix\Connector\Controller\Cart;
 
 use Fullmetrix\Connector\Model\Config;
+use Fullmetrix\Connector\Model\StoreScope;
+use Fullmetrix\Connector\Model\StoreSettingsProvider;
 use Magento\Catalog\Api\ProductRepositoryInterface;
+use Magento\Catalog\Model\Product;
+use Magento\ConfigurableProduct\Model\Product\Type\Configurable;
 use Magento\Checkout\Model\Cart as CheckoutCart;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\ActionInterface;
@@ -22,6 +26,9 @@ class Recover implements ActionInterface, HttpGetActionInterface
         private readonly Config $config,
         private readonly CheckoutCart $cart,
         private readonly ProductRepositoryInterface $productRepository,
+        private readonly StoreScope $storeScope,
+        private readonly StoreSettingsProvider $storeSettings,
+        private readonly Configurable $configurableType,
     ) {
     }
 
@@ -33,6 +40,9 @@ class Recover implements ActionInterface, HttpGetActionInterface
         $payload = (string) $this->request->getParam('fm_cart', '');
         $signature = (string) $this->request->getParam('fm_cart_sig', '');
         if ('' === $payload || '' === $signature || !$this->config->isRegistered()) {
+            return $redirect;
+        }
+        if ((int) $this->cart->getQuote()->getStoreId() !== $this->storeSettings->getStoreId()) {
             return $redirect;
         }
 
@@ -50,18 +60,40 @@ class Recover implements ActionInterface, HttpGetActionInterface
         }
 
         $items = \is_array($decoded['items'] ?? null) ? $decoded['items'] : [];
-        foreach ($items as $item) {
+        foreach (array_slice($items, 0, 100) as $item) {
             if (!\is_array($item)) {
                 continue;
             }
-            $productId = (int) ($item['v'] ?? 0) > 0 ? (int) $item['v'] : (int) ($item['id'] ?? 0);
-            $quantity = max(1, (int) ($item['q'] ?? 1));
+            $productId = (int) ($item['id'] ?? 0);
+            $quantity = min(999, max(1, (int) ($item['q'] ?? 1)));
             if ($productId <= 0) {
                 continue;
             }
             try {
-                $product = $this->productRepository->getById($productId);
-                $this->cart->addProduct($product, ['qty' => $quantity]);
+                $product = $this->productRepository->getById(
+                    $productId,
+                    false,
+                    $this->storeSettings->getStoreId(),
+                    true
+                );
+                if (!$product instanceof Product || !$this->storeScope->includesProduct($product)) {
+                    continue;
+                }
+                $params = ['qty' => $quantity];
+                $rawAttributes = \is_array($item['a'] ?? null) ? $item['a'] : [];
+                $attributes = [];
+                foreach ($rawAttributes as $attributeId => $optionId) {
+                    if ((int) $attributeId > 0 && (int) $optionId > 0) {
+                        $attributes[(int) $attributeId] = (int) $optionId;
+                    }
+                }
+                if (0 === \count($attributes) && (int) ($item['v'] ?? 0) > 0) {
+                    $attributes = $this->attributesForLegacyVariation($product, (int) $item['v']);
+                }
+                if (\count($attributes) > 0) {
+                    $params['super_attribute'] = $attributes;
+                }
+                $this->cart->addProduct($product, $params);
             } catch (\Throwable) {
             }
         }
@@ -80,5 +112,36 @@ class Recover implements ActionInterface, HttpGetActionInterface
         }
 
         return $redirect;
+    }
+
+    private function attributesForLegacyVariation(Product $parent, int $variationId): array
+    {
+        try {
+            $child = $this->productRepository->getById(
+                $variationId,
+                false,
+                $this->storeSettings->getStoreId(),
+                true
+            );
+            if (!$child instanceof Product || !$this->storeScope->includesProduct($child)) {
+                return [];
+            }
+            $attributes = [];
+            foreach ($this->configurableType->getConfigurableAttributes($parent) as $attribute) {
+                $productAttribute = $attribute->getProductAttribute();
+                if (null === $productAttribute) {
+                    continue;
+                }
+                $attributeId = (int) $productAttribute->getAttributeId();
+                $optionId = (int) $child->getData((string) $productAttribute->getAttributeCode());
+                if ($attributeId > 0 && $optionId > 0) {
+                    $attributes[$attributeId] = $optionId;
+                }
+            }
+
+            return $attributes;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 }

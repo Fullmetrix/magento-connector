@@ -8,14 +8,13 @@ use Magento\Customer\Model\ResourceModel\Group\CollectionFactory as CustomerGrou
 use Magento\SalesRule\Model\CouponFactory;
 use Magento\SalesRule\Model\Rule;
 use Magento\SalesRule\Model\RuleFactory;
-use Magento\Store\Model\StoreManagerInterface;
 
 class CouponCommandHandler
 {
     public function __construct(
         private readonly RuleFactory $ruleFactory,
         private readonly CouponFactory $couponFactory,
-        private readonly StoreManagerInterface $storeManager,
+        private readonly StoreSettingsProvider $storeSettings,
         private readonly CustomerGroupCollectionFactory $customerGroupCollectionFactory,
         private readonly \Magento\Catalog\Model\ProductFactory $productFactory,
     ) {
@@ -55,11 +54,14 @@ class CouponCommandHandler
 
     private function updateCoupon(array $payload): array
     {
+        if (null !== $this->generatedCouponReference($payload)) {
+            return ['success' => false, 'error' => 'generated_coupon_read_only'];
+        }
         $code = strtoupper(trim((string) ($payload['code'] ?? '')));
         $rule = null;
-        if (isset($payload['id']) && (int) $payload['id'] > 0) {
+        if (isset($payload['id']) && ctype_digit((string) $payload['id']) && (int) $payload['id'] > 0) {
             $rule = $this->ruleFactory->create()->load((int) $payload['id']);
-            if (!$rule->getRuleId()) {
+            if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
                 $rule = null;
             }
         }
@@ -83,11 +85,30 @@ class CouponCommandHandler
 
     private function deleteCoupon(array $payload): array
     {
+        $generatedCouponReference = $this->generatedCouponReference($payload);
+        if (null !== $generatedCouponReference) {
+            try {
+                [$ruleId, $couponId] = $generatedCouponReference;
+                $coupon = $this->couponFactory->create()->load($couponId);
+                if (!$coupon->getCouponId() || (int) $coupon->getRuleId() !== $ruleId) {
+                    return ['success' => false, 'error' => 'coupon_not_found'];
+                }
+                $rule = $this->ruleFactory->create()->load($ruleId);
+                if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
+                    return ['success' => false, 'error' => 'coupon_not_found'];
+                }
+                $coupon->delete();
+
+                return ['success' => true, 'data' => ['deleted' => true]];
+            } catch (\Throwable $e) {
+                return ['success' => false, 'error' => 'delete_failed: ' . $e->getMessage()];
+            }
+        }
         $code = strtoupper(trim((string) ($payload['code'] ?? '')));
         $rule = null;
-        if (isset($payload['id']) && (int) $payload['id'] > 0) {
+        if (isset($payload['id']) && ctype_digit((string) $payload['id']) && (int) $payload['id'] > 0) {
             $rule = $this->ruleFactory->create()->load((int) $payload['id']);
-            if (!$rule->getRuleId()) {
+            if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
                 $rule = null;
             }
         }
@@ -112,16 +133,12 @@ class CouponCommandHandler
         $isNew = !$rule->getRuleId();
 
         if ($isNew) {
-            $websiteIds = [];
-            foreach ($this->storeManager->getWebsites() as $website) {
-                $websiteIds[] = (int) $website->getId();
-            }
             $customerGroupIds = [];
             foreach ($this->customerGroupCollectionFactory->create() as $group) {
                 $customerGroupIds[] = (int) $group->getId();
             }
             $rule->setIsActive(1);
-            $rule->setWebsiteIds($websiteIds);
+            $rule->setWebsiteIds([$this->storeSettings->getWebsiteId()]);
             $rule->setCustomerGroupIds($customerGroupIds);
         }
 
@@ -155,11 +172,11 @@ class CouponCommandHandler
         if (\array_key_exists('usageLimitPerUser', $payload)) {
             $rule->setUsesPerCustomer((int) $payload['usageLimitPerUser']);
         }
-        if (!empty($payload['startsAt'])) {
-            $rule->setFromDate($this->toDate((string) $payload['startsAt']));
+        if (\array_key_exists('startsAt', $payload)) {
+            $rule->setFromDate(!empty($payload['startsAt']) ? $this->toDate((string) $payload['startsAt']) : null);
         }
-        if (!empty($payload['expiresAt'])) {
-            $rule->setToDate($this->toDate((string) $payload['expiresAt']));
+        if (\array_key_exists('expiresAt', $payload)) {
+            $rule->setToDate(!empty($payload['expiresAt']) ? $this->toDate((string) $payload['expiresAt']) : null);
         }
 
         if ($isNew || \array_key_exists('minimumAmount', $payload)) {
@@ -231,7 +248,7 @@ class CouponCommandHandler
         }
         $rule = $this->ruleFactory->create()->load((int) $coupon->getRuleId());
 
-        return $rule->getRuleId() ? $rule : null;
+        return $rule->getRuleId() && $this->ruleInScope($rule) ? $rule : null;
     }
 
     private function toDate(string $value): string
@@ -241,5 +258,24 @@ class CouponCommandHandler
         } catch (\Throwable) {
             return $value;
         }
+    }
+
+    private function generatedCouponReference(array $payload): ?array
+    {
+        $id = (string) ($payload['id'] ?? '');
+        if (1 !== preg_match('/^(\d+):(\d+)$/', $id, $matches)) {
+            return null;
+        }
+
+        return [(int) $matches[1], (int) $matches[2]];
+    }
+
+    private function ruleInScope(Rule $rule): bool
+    {
+        return \in_array(
+            $this->storeSettings->getWebsiteId(),
+            array_map('intval', $rule->getWebsiteIds()),
+            true
+        );
     }
 }

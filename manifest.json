@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
-  "minimumRequired": "1.0.0",
-  "changelog": "Initial release. NDJSON streaming export of orders, customers, products, categories, coupons and refunds. Real-time webhooks, visitor tracking, coupon commands, cart recovery and checkout consent."
+  "version": "1.1.0",
+  "minimumRequired": "1.1.0",
+  "changelog": "Store-scoped exports, persistent webhook retries, signed consent updates, MSI reservations and salable stock, catalog-rule prices, committed deletions, enriched entities, generated coupons and configurable cart recovery."
 }

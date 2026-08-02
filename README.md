@@ -1,23 +1,21 @@
 # Fullmetrix Magento 2 Connector
 
-[![Latest Version](https://img.shields.io/packagist/v/fullmetrix/magento-connector.svg)](https://packagist.org/packages/fullmetrix/magento-connector)
-
 Connects a Magento 2 / Adobe Commerce store to Fullmetrix. Streams orders, customers, products, categories, cart price rules and credit memos, dispatches realtime entity webhooks and visitor tracking events, and supports remote coupon management and cart recovery links.
 
-Compatible with Magento 2.4+ and Adobe Commerce (PHP 8.1+).
+Compatible with Magento 2.4.4+ and Adobe Commerce (PHP 8.1+).
 
 ## Installation
 
 Via Composer:
 
 ```bash
-composer require fullmetrix/magento-connector
+composer require fullmetrix/magento-connector:^1.1
 bin/magento module:enable Fullmetrix_Connector
 bin/magento setup:upgrade
 bin/magento cache:flush
 ```
 
-Or manually: copy this repository into `app/code/Fullmetrix/Connector`, then run the same `module:enable`, `setup:upgrade` and `cache:flush` commands.
+Alternatively, download the ZIP from Fullmetrix, extract it into `app/code/Fullmetrix/Connector`, then run the same Magento commands.
 
 ## Configuration
 

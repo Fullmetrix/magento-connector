@@ -44,19 +44,15 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
 
     protected function serializeRow(string $entity, object $row): ?array
     {
-        try {
-            return match ($entity) {
-                'orders' => $this->serializer->serializeOrder($row),
-                'customers' => $this->serializer->serializeCustomer($row),
-                'products' => $this->serializer->serializeProduct($row),
-                'categories' => $this->serializer->serializeCategory($row),
-                'coupons' => $this->serializer->serializeCoupon($row),
-                'refunds' => $this->serializer->serializeRefund($row),
-                default => null,
-            };
-        } catch (\Throwable) {
-            return null;
-        }
+        return match ($entity) {
+            'orders' => $this->serializer->serializeOrder($row),
+            'customers' => $this->serializer->serializeCustomer($row),
+            'products' => $this->serializer->serializeProduct($row),
+            'categories' => $this->serializer->serializeCategory($row),
+            'coupons' => $this->serializer->serializeCoupon($row),
+            'refunds' => $this->serializer->serializeRefund($row),
+            default => null,
+        };
     }
 
     protected function lineType(string $entity): string

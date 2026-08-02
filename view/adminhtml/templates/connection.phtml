@@ -5,6 +5,7 @@
     <?php if ($block->isRegistered()): ?>
         <div class="message message-success success">
             <div><?= $escaper->escapeHtml(__('Boutique connectée à Fullmetrix avec le code %1.', $block->getConnectionCode())) ?></div>
+            <div><?= $escaper->escapeHtml(__('Vue boutique : %1', $block->getConnectedStoreLabel())) ?></div>
         </div>
         <p>
             <a class="action-default" href="<?= $escaper->escapeUrl($block->getAppUrl()) ?>" target="_blank" rel="noopener">
@@ -27,6 +28,20 @@
                 </label>
                 <div class="admin__field-control">
                     <input type="text" class="admin__control-text" id="fullmetrix_connection_code" name="connection_code" placeholder="FMTX-XXXX-XXXX-XXXX" style="max-width: 320px;"/>
+                </div>
+            </div>
+            <div class="admin__field">
+                <label class="admin__field-label" for="fullmetrix_store_id">
+                    <?= $escaper->escapeHtml(__('Vue boutique')) ?>
+                </label>
+                <div class="admin__field-control">
+                    <select class="admin__control-select" id="fullmetrix_store_id" name="store_id">
+                        <?php foreach ($block->getAvailableStores() as $store): ?>
+                            <option value="<?= $escaper->escapeHtmlAttr((string) $store['id']) ?>">
+                                <?= $escaper->escapeHtml($store['label']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
             </div>
             <br/>

@@ -12,28 +12,47 @@ class ConnectionManager
         private readonly Config $config,
         private readonly ApiClient $apiClient,
         private readonly StoreSettingsProvider $storeSettings,
+        private readonly WebhookQueue $webhookQueue,
     ) {
     }
 
-    public function connect(string $connectionCode): array
+    public function connect(string $connectionCode, ?int $storeId = null): array
     {
         $connectionCode = strtoupper(trim($connectionCode));
         if (1 !== preg_match(self::CODE_PATTERN, $connectionCode)) {
             return ['success' => false, 'error' => 'invalid_code_format'];
         }
 
-        $result = $this->apiClient->register($connectionCode, $this->storeSettings->getSiteUrl());
+        try {
+            $store = null !== $storeId
+                ? $this->storeSettings->getStoreById($storeId)
+                : $this->storeSettings->getStore();
+        } catch (\Throwable) {
+            return ['success' => false, 'error' => 'invalid_store'];
+        }
+
+        $selectedStoreId = (int) $store->getId();
+        if ($selectedStoreId <= 0 || !(bool) $store->isActive()) {
+            return ['success' => false, 'error' => 'invalid_store'];
+        }
+        $result = $this->apiClient->register(
+            $connectionCode,
+            $this->storeSettings->getSiteUrl($selectedStoreId),
+            $selectedStoreId
+        );
         if (!$result['success']) {
             return $result;
         }
 
-        $this->config->saveConnection($connectionCode, $result['connectionSecret']);
+        $this->webhookQueue->clear();
+        $this->config->saveConnection($connectionCode, $result['connectionSecret'], $selectedStoreId);
 
         return ['success' => true];
     }
 
     public function disconnect(): void
     {
+        $this->webhookQueue->clear();
         $this->config->clearConnection();
     }
 }

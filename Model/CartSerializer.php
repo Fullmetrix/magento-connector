@@ -6,12 +6,14 @@ namespace Fullmetrix\Connector\Model;
 
 use Magento\Quote\Model\Quote;
 use Magento\Store\Model\StoreManagerInterface;
+use Magento\Catalog\Helper\Image as ImageHelper;
 
 class CartSerializer
 {
     public function __construct(
         private readonly Config $config,
         private readonly StoreManagerInterface $storeManager,
+        private readonly ImageHelper $imageHelper,
     ) {
     }
 
@@ -20,22 +22,47 @@ class CartSerializer
         $items = [];
         foreach ($quote->getAllVisibleItems() as $item) {
             $variationId = null;
+            $variationAttributes = [];
             if ('configurable' === $item->getProductType()) {
                 foreach ($item->getChildren() as $child) {
                     $variationId = (int) $child->getProductId();
                     break;
                 }
+                try {
+                    $buyRequest = $item->getBuyRequest();
+                    $rawAttributes = $buyRequest->getData('super_attribute');
+                    if (\is_array($rawAttributes)) {
+                        foreach ($rawAttributes as $attributeId => $optionId) {
+                            if ((int) $attributeId > 0 && (int) $optionId > 0) {
+                                $variationAttributes[(int) $attributeId] = (int) $optionId;
+                            }
+                        }
+                    }
+                } catch (\Throwable) {
+                }
+            }
+            $product = $item->getProduct();
+            $imageUrl = null;
+            $productUrl = null;
+            if (null !== $product && $product->getId()) {
+                try {
+                    $product->setStoreId((int) $quote->getStoreId());
+                    $imageUrl = (string) $this->imageHelper->init($product, 'product_thumbnail_image')->getUrl();
+                    $productUrl = (string) $product->getProductUrl();
+                } catch (\Throwable) {
+                }
             }
             $items[] = [
                 'product_id' => (int) $item->getProductId(),
                 'variation_id' => $variationId,
+                'variation_attributes' => $variationAttributes,
                 'name' => (string) $item->getName(),
                 'quantity' => (float) $item->getQty(),
                 'price' => $this->money((float) $item->getPrice()),
                 'line_total' => $this->money((float) $item->getRowTotal()),
                 'sku' => (string) $item->getSku(),
-                'image_url' => null,
-                'url' => null,
+                'image_url' => $imageUrl,
+                'url' => $productUrl,
             ];
         }
 
@@ -75,6 +102,7 @@ class CartSerializer
             $payloadItems[] = [
                 'id' => $item['product_id'],
                 'v' => $item['variation_id'],
+                'a' => $item['variation_attributes'],
                 'q' => (int) round((float) $item['quantity']),
             ];
         }

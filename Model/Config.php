@@ -9,7 +9,7 @@ use Magento\Framework\FlagManager;
 
 class Config
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = '1.1.0';
 
     public const FLAG_CONNECTION_CODE = 'fullmetrix_connection_code';
     public const FLAG_CONNECTION_SECRET = 'fullmetrix_connection_secret';
@@ -19,6 +19,8 @@ class Config
     public const FLAG_PLUGIN_CONFIG_AT = 'fullmetrix_plugin_config_at';
     public const FLAG_PLUGIN_CONFIG_FAILED_AT = 'fullmetrix_plugin_config_failed_at';
     public const FLAG_API_BASE_OVERRIDE = 'fullmetrix_api_base';
+    public const FLAG_STORE_ID = 'fullmetrix_store_id';
+    public const FLAG_REFRESH_ALL_PRODUCTS = 'fullmetrix_refresh_all_products';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
     private const CONFIG_TTL_SECONDS = 1800;
@@ -89,12 +91,13 @@ class Config
         return $this->isRegistered() && $this->areWebhooksEnabled();
     }
 
-    public function saveConnection(string $code, string $secret): void
+    public function saveConnection(string $code, string $secret, int $storeId): void
     {
         $this->flagManager->saveFlag(self::FLAG_CONNECTION_CODE, $code);
         $this->flagManager->saveFlag(self::FLAG_CONNECTION_SECRET, $secret);
         $this->flagManager->saveFlag(self::FLAG_REGISTERED, true);
         $this->flagManager->saveFlag(self::FLAG_WEBHOOKS_ENABLED, true);
+        $this->flagManager->saveFlag(self::FLAG_STORE_ID, $storeId);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
     }
@@ -104,9 +107,11 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_CONNECTION_CODE);
         $this->flagManager->deleteFlag(self::FLAG_CONNECTION_SECRET);
         $this->flagManager->deleteFlag(self::FLAG_REGISTERED);
+        $this->flagManager->deleteFlag(self::FLAG_STORE_ID);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
+        $this->flagManager->deleteFlag(self::FLAG_REFRESH_ALL_PRODUCTS);
     }
 
     public function getCachedPluginConfig(): ?array
@@ -154,5 +159,22 @@ class Config
             return;
         }
         $this->flagManager->saveFlag(self::FLAG_API_BASE_OVERRIDE, rtrim(trim($apiBase), '/'));
+    }
+
+    public function markAllProductsForRefresh(): void
+    {
+        if ($this->isRegistered()) {
+            $this->flagManager->saveFlag(self::FLAG_REFRESH_ALL_PRODUCTS, true);
+        }
+    }
+
+    public function shouldRefreshAllProducts(): bool
+    {
+        return (bool) $this->flagManager->getFlagData(self::FLAG_REFRESH_ALL_PRODUCTS);
+    }
+
+    public function clearAllProductsRefresh(): void
+    {
+        $this->flagManager->deleteFlag(self::FLAG_REFRESH_ALL_PRODUCTS);
     }
 }

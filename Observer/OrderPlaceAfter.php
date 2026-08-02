@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Fullmetrix\Connector\Observer;
 
 use Fullmetrix\Connector\Model\Config;
-use Fullmetrix\Connector\Model\HmacSigner;
-use Fullmetrix\Connector\Model\HttpClient;
 use Fullmetrix\Connector\Model\TrackingQueue;
+use Fullmetrix\Connector\Model\StoreScope;
+use Fullmetrix\Connector\Model\WebhookQueue;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Newsletter\Model\SubscriberFactory;
@@ -17,17 +17,17 @@ class OrderPlaceAfter implements ObserverInterface
 {
     public function __construct(
         private readonly Config $config,
-        private readonly HmacSigner $signer,
-        private readonly HttpClient $httpClient,
         private readonly TrackingQueue $trackingQueue,
         private readonly SubscriberFactory $subscriberFactory,
+        private readonly StoreScope $storeScope,
+        private readonly WebhookQueue $webhookQueue,
     ) {
     }
 
     public function execute(Observer $observer): void
     {
         $order = $observer->getEvent()->getData('order');
-        if (!$order instanceof Order || !$this->config->isActive()) {
+        if (!$order instanceof Order || !$this->config->isActive() || !$this->storeScope->includesOrder($order)) {
             return;
         }
 
@@ -61,26 +61,12 @@ class OrderPlaceAfter implements ObserverInterface
             }
 
             $billing = $order->getBillingAddress();
-            $body = json_encode([
-                'key' => $this->config->getConnectionCode(),
-                'email' => $email,
-                'phone' => null !== $billing ? (string) $billing->getTelephone() : '',
-                'consent' => true,
-                'channels' => ['email'],
-                'pageUrl' => '',
-            ], \JSON_UNESCAPED_SLASHES);
-            if (false === $body) {
-                return;
-            }
-            $url = $this->config->getAppOrigin() . '/api/checkout-consent';
-            $headers = $this->signer->buildHeaders($body);
-            register_shutdown_function(function () use ($url, $body, $headers): void {
-                try {
-                    HttpClient::finishResponse();
-                    $this->httpClient->postFireAndForget($url, $body, $headers);
-                } catch (\Throwable) {
-                }
-            });
+            $this->webhookQueue->enqueueConsent(
+                $email,
+                true,
+                null !== $billing ? (string) $billing->getTelephone() : '',
+                null !== $billing ? (string) $billing->getCountryId() : ''
+            );
         } catch (\Throwable) {
         }
     }

@@ -51,7 +51,7 @@ class HttpClient
         ];
     }
 
-    public function postFireAndForget(string $url, string $body, array $headers): void
+    public function postFireAndForget(string $url, string $body, array $headers): bool
     {
         $detached = self::isClientDetached();
         $ch = curl_init($url);
@@ -65,8 +65,18 @@ class HttpClient
             CURLOPT_NOSIGNAL => 1,
             CURLOPT_FOLLOWLOCATION => false,
         ]);
-        curl_exec($ch);
+        $result = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         curl_close($ch);
+
+        if (false === $result || $status < 200 || $status >= 300) {
+            return false;
+        }
+        $response = json_decode((string) $result, true);
+        $error = \is_array($response) ? (string) ($response['error'] ?? '') : '';
+        $ignored = \is_array($response) && !empty($response['ignored']);
+
+        return !$ignored && !\in_array($error, ['delete_failed', 'processing_failed'], true);
     }
 
     public function getJsonFast(string $url, array $headers): array
