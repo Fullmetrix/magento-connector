@@ -20,6 +20,7 @@ class Config
     public const FLAG_PLUGIN_CONFIG_FAILED_AT = 'fullmetrix_plugin_config_failed_at';
     public const FLAG_API_BASE_OVERRIDE = 'fullmetrix_api_base';
     public const FLAG_STORE_ID = 'fullmetrix_store_id';
+    public const FLAG_INSTALLATION_ID = 'fullmetrix_installation_id';
     public const FLAG_REFRESH_ALL_PRODUCTS = 'fullmetrix_refresh_all_products';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
@@ -100,6 +101,17 @@ class Config
         $this->flagManager->saveFlag(self::FLAG_STORE_ID, $storeId);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
+    }
+
+    public function getStoreCanonicalId(int $storeId): string
+    {
+        $installationId = $this->flagManager->getFlagData(self::FLAG_INSTALLATION_ID);
+        if (!\is_string($installationId) || '' === $installationId) {
+            $installationId = bin2hex(random_bytes(16));
+            $this->flagManager->saveFlag(self::FLAG_INSTALLATION_ID, $installationId);
+        }
+
+        return hash('sha256', $installationId . ':' . $storeId);
     }
 
     public function clearConnection(): void
