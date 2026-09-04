@@ -53,6 +53,26 @@ class EntitySerializer
         'created_at', 'updated_at', 'manufacturer', 'image', 'category_ids',
     ];
 
+    private const LINE_ITEM_MAPPED_KEYS = [
+        'item_id', 'entity_id', 'order_id', 'product_id', 'sku', 'name',
+        'qty_ordered', 'qty_refunded', 'price', 'row_total', 'discount_amount',
+        'tax_amount', 'tax_percent', 'product_type', 'product_options',
+        'parent_item_id', 'created_at', 'updated_at',
+    ];
+
+    private const ADDRESS_MAPPED_KEYS = [
+        'entity_id', 'parent_id', 'address_type',
+        'firstname', 'lastname', 'company', 'vat_id',
+        'street', 'city', 'region', 'region_code', 'region_id',
+        'postcode', 'country_id', 'email', 'telephone',
+        'customer_id', 'customer_address_id',
+    ];
+
+    private const REFUND_MAPPED_KEYS = [
+        'entity_id', 'order_id', 'increment_id', 'grand_total',
+        'order_currency_code', 'customer_note', 'created_at', 'updated_at',
+    ];
+
     private ?array $categoryNameCache = null;
     private ?array $customerGroupCache = null;
     private ?array $productSalesCache = null;
@@ -507,6 +527,7 @@ class EntitySerializer
                 'quantity' => (float) $item->getQty(),
                 'total' => $this->money((float) $item->getRowTotal() - (float) $item->getDiscountAmount()),
                 'total_tax' => $this->money((float) $item->getTaxAmount()),
+                'meta_data' => $this->extraAttributesMeta($item->getData(), self::LINE_ITEM_MAPPED_KEYS),
             ];
         }
 
@@ -521,6 +542,7 @@ class EntitySerializer
             'customer_email' => null !== $order ? (string) $order->getCustomerEmail() : null,
             'date_created' => $this->iso((string) $creditmemo->getCreatedAt()),
             'line_items' => $lineItems,
+            'meta_data' => $this->extraAttributesMeta($creditmemo->getData(), self::REFUND_MAPPED_KEYS),
         ];
     }
 
@@ -549,6 +571,16 @@ class EntitySerializer
                     'value' => (string) ($attribute['value'] ?? ''),
                 ];
             }
+            foreach ($productOptions['options'] ?? [] as $option) {
+                $metaData[] = [
+                    'key' => (string) ($option['label'] ?? ''),
+                    'value' => (string) ($option['print_value'] ?? $option['value'] ?? ''),
+                ];
+            }
+            $metaData = $this->mergeMeta(
+                $metaData,
+                $this->extraAttributesMeta($item->getData(), self::LINE_ITEM_MAPPED_KEYS)
+            );
 
             $items[] = [
                 'id' => (int) $item->getItemId(),
@@ -638,6 +670,7 @@ class EntitySerializer
             'country' => (string) $address->getCountryId(),
             'email' => (string) ($address->getEmail() ?: $fallbackEmail),
             'phone' => (string) $address->getTelephone(),
+            'meta_data' => $this->extraAttributesMeta($address->getData(), self::ADDRESS_MAPPED_KEYS),
         ];
     }
 
@@ -660,6 +693,7 @@ class EntitySerializer
             'postcode' => (string) $address->getPostcode(),
             'country' => (string) $address->getCountryId(),
             'phone' => (string) $address->getTelephone(),
+            'meta_data' => $this->extraAttributesMeta($address->getData(), self::ADDRESS_MAPPED_KEYS),
         ];
     }
 
@@ -1061,6 +1095,28 @@ class EntitySerializer
      * Cut on a character boundary: a byte-level cut splits a multibyte
      * character in two, which is enough to make the payload unserializable.
      */
+    /**
+     * @param list<array{key: string, value: string}> $metaData
+     * @param list<array{key: string, value: string}> $extras
+     *
+     * @return list<array{key: string, value: string}>
+     */
+    private function mergeMeta(array $metaData, array $extras): array
+    {
+        $seen = [];
+        foreach ($metaData as $item) {
+            $seen[$item['key']] = true;
+        }
+        foreach ($extras as $item) {
+            if (isset($seen[$item['key']])) {
+                continue;
+            }
+            $metaData[] = $item;
+        }
+
+        return $metaData;
+    }
+
     private static function truncateUtf8(string $text, int $maxBytes): string
     {
         if ($maxBytes <= 0) {
