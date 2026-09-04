@@ -19,6 +19,36 @@ use Magento\SalesRule\Model\RuleFactory;
 
 class EntitySerializer
 {
+    private const META_VALUE_MAX_LENGTH = 1000;
+
+    private const SENSITIVE_KEYS = [
+        'password_hash', 'rp_token', 'rp_token_created_at', 'confirmation',
+        'protect_code', 'x_forwarded_for',
+    ];
+
+    private const ORDER_MAPPED_KEYS = [
+        'entity_id', 'increment_id', 'status', 'state',
+        'order_currency_code', 'base_currency_code', 'base_to_order_rate',
+        'grand_total', 'subtotal', 'discount_amount', 'shipping_amount', 'tax_amount',
+        'created_at', 'updated_at', 'customer_id', 'customer_email',
+        'customer_group_id', 'customer_note', 'remote_ip',
+        'store_id', 'store_name', 'coupon_code', 'shipping_method',
+        'shipping_description', 'shipping_tax_amount', 'total_paid', 'total_refunded',
+    ];
+
+    private const CUSTOMER_MAPPED_KEYS = [
+        'entity_id', 'email', 'firstname', 'lastname', 'prefix', 'suffix',
+        'dob', 'taxvat', 'group_id', 'website_id', 'store_id',
+        'created_at', 'updated_at',
+    ];
+
+    private const PRODUCT_MAPPED_KEYS = [
+        'entity_id', 'name', 'url_key', 'sku', 'type_id', 'status',
+        'description', 'short_description', 'price', 'special_price',
+        'special_from_date', 'special_to_date', 'weight',
+        'created_at', 'updated_at', 'manufacturer', 'image', 'category_ids',
+    ];
+
     private ?array $categoryNameCache = null;
     private ?array $customerGroupCache = null;
     private ?array $productSalesCache = null;
@@ -157,6 +187,7 @@ class EntitySerializer
             'tax_lines' => $taxLines,
             'payments' => $payments,
             'refunds' => $refundDates,
+            'meta_data' => $this->extraAttributesMeta($order->getData(), self::ORDER_MAPPED_KEYS),
         ];
         $billingPayload = $this->address($billing, (string) $order->getCustomerEmail());
         if (null !== $billingPayload) {
@@ -223,6 +254,7 @@ class EntitySerializer
             'store_id' => (int) $customer->getStoreId(),
             'date_created' => $this->iso((string) $customer->getCreatedAt()),
             'date_modified' => $this->iso((string) $customer->getUpdatedAt()),
+            'meta_data' => $this->extraAttributesMeta($customer->getData(), self::CUSTOMER_MAPPED_KEYS),
         ];
         $billingPayload = $this->customerAddress($billing);
         if (null !== $billingPayload) {
@@ -370,6 +402,7 @@ class EntitySerializer
             'total_sales' => $this->productSales((int) $product->getId()),
             'date_created' => $this->iso((string) $product->getCreatedAt()),
             'date_modified' => $this->iso((string) $product->getUpdatedAt()),
+            'meta_data' => $this->extraAttributesMeta($product->getData(), self::PRODUCT_MAPPED_KEYS),
         ];
     }
 
@@ -400,6 +433,10 @@ class EntitySerializer
             'position' => (int) $category->getPosition(),
             'date_created' => $this->iso((string) $category->getCreatedAt()),
             'date_modified' => $this->iso((string) $category->getUpdatedAt()),
+            'meta_data' => $this->extraAttributesMeta($category->getData(), [
+                'entity_id', 'name', 'url_key', 'parent_id', 'description',
+                'product_count', 'image', 'position', 'created_at', 'updated_at',
+            ]),
         ];
     }
 
@@ -954,5 +991,35 @@ class EntitySerializer
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Turn every attribute that is not already exposed as a top-level field into
+     * meta_data, so custom EAV attributes reach the platform without having to
+     * be whitelisted here first.
+     *
+     * @param array<string, mixed> $data
+     * @param list<string> $mappedKeys
+     *
+     * @return list<array{key: string, value: string}>
+     */
+    private function extraAttributesMeta(array $data, array $mappedKeys): array
+    {
+        $meta = [];
+        foreach ($data as $key => $value) {
+            if (\in_array($key, $mappedKeys, true) || \in_array($key, self::SENSITIVE_KEYS, true)) {
+                continue;
+            }
+            if (null === $value || '' === $value || !\is_scalar($value)) {
+                continue;
+            }
+            $text = (string) $value;
+            if (\strlen($text) > self::META_VALUE_MAX_LENGTH) {
+                continue;
+            }
+            $meta[] = ['key' => (string) $key, 'value' => $text];
+        }
+
+        return $meta;
     }
 }
