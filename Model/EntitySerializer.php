@@ -25,6 +25,8 @@ class EntitySerializer
 
     private const META_SHORT_VALUE_LENGTH = 512;
 
+    private const META_KEY_MAX_LENGTH = 80;
+
     private const SENSITIVE_KEYS = [
         'password_hash', 'rp_token', 'rp_token_created_at', 'confirmation',
         'protect_code', 'x_forwarded_for',
@@ -211,7 +213,11 @@ class EntitySerializer
             'tax_lines' => $taxLines,
             'payments' => $payments,
             'refunds' => $refundDates,
-            'meta_data' => $this->extraAttributesMeta($order->getData(), self::ORDER_MAPPED_KEYS),
+            'meta_data' => array_merge(
+                $this->extraAttributesMeta($order->getData(), self::ORDER_MAPPED_KEYS),
+                null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
+                null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
+            ),
         ];
         $billingPayload = $this->address($billing, (string) $order->getCustomerEmail());
         if (null !== $billingPayload) {
@@ -278,7 +284,11 @@ class EntitySerializer
             'store_id' => (int) $customer->getStoreId(),
             'date_created' => $this->iso((string) $customer->getCreatedAt()),
             'date_modified' => $this->iso((string) $customer->getUpdatedAt()),
-            'meta_data' => $this->extraAttributesMeta($customer->getData(), self::CUSTOMER_MAPPED_KEYS),
+            'meta_data' => array_merge(
+                $this->extraAttributesMeta($customer->getData(), self::CUSTOMER_MAPPED_KEYS),
+                null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
+                null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
+            ),
         ];
         $billingPayload = $this->customerAddress($billing);
         if (null !== $billingPayload) {
@@ -670,7 +680,6 @@ class EntitySerializer
             'country' => (string) $address->getCountryId(),
             'email' => (string) ($address->getEmail() ?: $fallbackEmail),
             'phone' => (string) $address->getTelephone(),
-            'meta_data' => $this->extraAttributesMeta($address->getData(), self::ADDRESS_MAPPED_KEYS),
         ];
     }
 
@@ -693,7 +702,6 @@ class EntitySerializer
             'postcode' => (string) $address->getPostcode(),
             'country' => (string) $address->getCountryId(),
             'phone' => (string) $address->getTelephone(),
-            'meta_data' => $this->extraAttributesMeta($address->getData(), self::ADDRESS_MAPPED_KEYS),
         ];
     }
 
@@ -1041,7 +1049,7 @@ class EntitySerializer
      *
      * @return list<array{key: string, value: string}>
      */
-    private function extraAttributesMeta(array $data, array $mappedKeys): array
+    private function extraAttributesMeta(array $data, array $mappedKeys, string $prefix = ''): array
     {
         $short = [];
         $long = [];
@@ -1062,10 +1070,13 @@ class EntitySerializer
                 continue;
             }
             if (\strlen($text) <= self::META_SHORT_VALUE_LENGTH) {
-                $short[] = ['key' => (string) $key, 'value' => $text];
+                $short[] = ['key' => self::truncateUtf8($prefix . $key, self::META_KEY_MAX_LENGTH), 'value' => $text];
                 continue;
             }
-            $long[] = ['key' => (string) $key, 'value' => self::truncateUtf8($text, self::META_VALUE_MAX_LENGTH)];
+            $long[] = [
+                'key' => self::truncateUtf8($prefix . $key, self::META_KEY_MAX_LENGTH),
+                'value' => self::truncateUtf8($text, self::META_VALUE_MAX_LENGTH),
+            ];
         }
 
         // Short values are emitted first so a single bulky text attribute can
