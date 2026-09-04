@@ -1176,7 +1176,14 @@ class EntitySerializer
         $this->relatedFetchedIds[$fkColumn] = ($this->relatedFetchedIds[$fkColumn] ?? []) + array_fill_keys($ids, true);
         $idList = implode(',', $ids);
 
-        foreach ($this->detectRelatedTables($fkColumn) as $table => $pkColumn) {
+        foreach ($this->detectRelatedTables($fkColumn) as $table => $meta) {
+            $pkColumn = $meta['pk'];
+            if ([] === $meta['columns']) {
+                continue;
+            }
+            // Colonnes listees: une colonne binaire serait lue en memoire pour
+            // chaque ligne avant d'etre ecartee par le filtre.
+            $select = '`' . implode('`, `', $meta['columns']) . '`';
             $where = '`' . $fkColumn . '` IN (' . $idList . ')';
             if ('' !== $pkColumn && $pkColumn !== $fkColumn) {
                 // Une seule ligne par entite, decidee en SQL: une table de
@@ -1187,7 +1194,7 @@ class EntitySerializer
             }
             try {
                 $connection = $this->resourceConnection->getConnection();
-                $rows = $connection->fetchAll('SELECT * FROM `' . $table . '` WHERE ' . $where);
+                $rows = $connection->fetchAll('SELECT ' . $select . ' FROM `' . $table . '` WHERE ' . $where);
             } catch (\Throwable) {
                 continue;
             }
@@ -1218,7 +1225,11 @@ class EntitySerializer
         try {
             $connection = $this->resourceConnection->getConnection();
             $rows = $connection->fetchAll(
-                'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column
+                'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column,
+                        GROUP_CONCAT(
+                            CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\', \'tinyblob\', \'binary\', \'varbinary\')
+                                 THEN NULL ELSE c.COLUMN_NAME END
+                        ) AS safe_columns
                  FROM information_schema.COLUMNS c
                  LEFT JOIN information_schema.KEY_COLUMN_USAGE k
                         ON (k.TABLE_SCHEMA = c.TABLE_SCHEMA AND k.TABLE_NAME = c.TABLE_NAME
@@ -1245,7 +1256,10 @@ class EntitySerializer
             if ($this->isCoreTable($name)) {
                 continue;
             }
-            $tables[$name] = (string) ($row['pk_column'] ?? '');
+            $tables[$name] = [
+                'pk' => (string) ($row['pk_column'] ?? ''),
+                'columns' => array_values(array_filter(explode(',', (string) ($row['safe_columns'] ?? '')))),
+            ];
             if (\count($tables) >= self::MAX_RELATED_TABLES) {
                 break;
             }
