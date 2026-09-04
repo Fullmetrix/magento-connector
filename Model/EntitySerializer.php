@@ -1022,11 +1022,16 @@ class EntitySerializer
             if ('' === $text) {
                 continue;
             }
+            // A custom attribute can hold binary or badly encoded bytes, which
+            // would make the payload unserializable and lose the whole entity.
+            if (1 !== preg_match('//u', $text)) {
+                continue;
+            }
             if (\strlen($text) <= self::META_SHORT_VALUE_LENGTH) {
                 $short[] = ['key' => (string) $key, 'value' => $text];
                 continue;
             }
-            $long[] = ['key' => (string) $key, 'value' => substr($text, 0, self::META_VALUE_MAX_LENGTH)];
+            $long[] = ['key' => (string) $key, 'value' => self::truncateUtf8($text, self::META_VALUE_MAX_LENGTH)];
         }
 
         // Short values are emitted first so a single bulky text attribute can
@@ -1042,11 +1047,26 @@ class EntitySerializer
             }
             $meta[] = [
                 'key' => $item['key'],
-                'value' => \strlen($item['value']) > $budget ? substr($item['value'], 0, $budget) : $item['value'],
+                'value' => \strlen($item['value']) > $budget
+                    ? self::truncateUtf8($item['value'], $budget)
+                    : $item['value'],
             ];
             $budget -= \strlen($item['value']);
         }
 
         return $meta;
+    }
+
+    /**
+     * Cut on a character boundary: a byte-level cut splits a multibyte
+     * character in two, which is enough to make the payload unserializable.
+     */
+    private static function truncateUtf8(string $text, int $maxBytes): string
+    {
+        if ($maxBytes <= 0) {
+            return '';
+        }
+
+        return \strlen($text) <= $maxBytes ? $text : mb_strcut($text, 0, $maxBytes, 'UTF-8');
     }
 }
