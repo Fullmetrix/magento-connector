@@ -32,6 +32,18 @@ class EntitySerializer
         'protect_code', 'x_forwarded_for',
     ];
 
+    /**
+     * Motifs appliques aux colonnes des tables tierces, bilingue: un module
+     * francais nomme ses colonnes jeton_api ou mot_de_passe, qui ne contiennent
+     * aucun motif anglais.
+     */
+    private const SENSITIVE_KEY_PATTERNS = [
+        'password', 'passwd', 'secret', 'token', 'api_key', 'apikey',
+        'private_key', 'salt', 'nonce', 'credential',
+        'jeton', 'mot_de_passe', 'motdepasse', 'cle_api', 'cle_secrete',
+        'cle_privee', 'empreinte', 'signature',
+    ];
+
     private const ORDER_MAPPED_KEYS = [
         'entity_id', 'increment_id', 'status', 'state',
         'order_currency_code', 'base_currency_code', 'base_to_order_rate',
@@ -106,6 +118,7 @@ class EntitySerializer
 
     private array $relatedTablesCache = [];
     private array $relatedMetaCache = [];
+    private array $relatedFetchedIds = [];
 
     private ?array $categoryNameCache = null;
     private ?array $customerGroupCache = null;
@@ -1091,7 +1104,9 @@ class EntitySerializer
         $short = [];
         $long = [];
         foreach ($data as $key => $value) {
-            if (\in_array($key, $mappedKeys, true) || \in_array($key, self::SENSITIVE_KEYS, true)) {
+            if (\in_array($key, $mappedKeys, true)
+                || \in_array($key, self::SENSITIVE_KEYS, true)
+                || self::isSensitiveKey((string) $key)) {
                 continue;
             }
             if (null === $value || !\is_scalar($value)) {
@@ -1157,8 +1172,9 @@ class EntitySerializer
             return;
         }
 
-        $this->relatedMetaCache[$fkColumn] = [];
-        $idList = implode(',', array_map('intval', $ids));
+        $ids = array_values(array_unique(array_map('intval', $ids)));
+        $this->relatedFetchedIds[$fkColumn] = ($this->relatedFetchedIds[$fkColumn] ?? []) + array_fill_keys($ids, true);
+        $idList = implode(',', $ids);
 
         foreach ($this->detectRelatedTables($fkColumn) as $table => $pkColumn) {
             $where = '`' . $fkColumn . '` IN (' . $idList . ')';
@@ -1257,8 +1273,18 @@ class EntitySerializer
     private function relatedMetaFor(string $entity, int $id): array
     {
         $fkColumn = self::RELATED_FK_BY_ENTITY[$entity] ?? null;
+        if (null === $fkColumn || $id <= 0) {
+            return [];
+        }
 
-        return null === $fkColumn ? [] : ($this->relatedMetaCache[$fkColumn][$id] ?? []);
+        // Prechargement paresseux: sur le flux la page a deja rempli le cache,
+        // sur le chemin webhook rien ne l'a fait. Sans ce repli, un webhook
+        // renverrait un payload plus pauvre et effacerait ces champs.
+        if (!isset($this->relatedFetchedIds[$fkColumn][$id])) {
+            $this->prefetchRelated($entity, [$id]);
+        }
+
+        return $this->relatedMetaCache[$fkColumn][$id] ?? [];
     }
 
     /**
@@ -1281,6 +1307,18 @@ class EntitySerializer
         }
 
         return $metaData;
+    }
+
+    private static function isSensitiveKey(string $key): bool
+    {
+        $lower = strtolower($key);
+        foreach (self::SENSITIVE_KEY_PATTERNS as $pattern) {
+            if (str_contains($lower, $pattern)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function truncateUtf8(string $text, int $maxBytes): string
