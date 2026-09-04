@@ -19,7 +19,11 @@ use Magento\SalesRule\Model\RuleFactory;
 
 class EntitySerializer
 {
-    private const META_VALUE_MAX_LENGTH = 1000;
+    private const META_VALUE_MAX_LENGTH = 20000;
+
+    private const META_TOTAL_MAX_LENGTH = 65536;
+
+    private const META_SHORT_VALUE_LENGTH = 512;
 
     private const SENSITIVE_KEYS = [
         'password_hash', 'rp_token', 'rp_token_created_at', 'confirmation',
@@ -1005,19 +1009,42 @@ class EntitySerializer
      */
     private function extraAttributesMeta(array $data, array $mappedKeys): array
     {
-        $meta = [];
+        $short = [];
+        $long = [];
         foreach ($data as $key => $value) {
             if (\in_array($key, $mappedKeys, true) || \in_array($key, self::SENSITIVE_KEYS, true)) {
                 continue;
             }
-            if (null === $value || '' === $value || !\is_scalar($value)) {
+            if (null === $value || !\is_scalar($value)) {
                 continue;
             }
-            $text = (string) $value;
-            if (\strlen($text) > self::META_VALUE_MAX_LENGTH) {
+            $text = \is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+            if ('' === $text) {
                 continue;
             }
-            $meta[] = ['key' => (string) $key, 'value' => $text];
+            if (\strlen($text) <= self::META_SHORT_VALUE_LENGTH) {
+                $short[] = ['key' => (string) $key, 'value' => $text];
+                continue;
+            }
+            $long[] = ['key' => (string) $key, 'value' => substr($text, 0, self::META_VALUE_MAX_LENGTH)];
+        }
+
+        // Short values are emitted first so a single bulky text attribute can
+        // never push an identifier-sized field out of the payload.
+        $meta = $short;
+        $budget = self::META_TOTAL_MAX_LENGTH;
+        foreach ($short as $item) {
+            $budget -= \strlen($item['value']);
+        }
+        foreach ($long as $item) {
+            if ($budget <= 0) {
+                break;
+            }
+            $meta[] = [
+                'key' => $item['key'],
+                'value' => \strlen($item['value']) > $budget ? substr($item['value'], 0, $budget) : $item['value'],
+            ];
+            $budget -= \strlen($item['value']);
         }
 
         return $meta;
