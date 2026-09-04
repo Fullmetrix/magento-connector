@@ -32,7 +32,12 @@ class EntityPaginator
         return \in_array($entity, self::ENTITIES, true);
     }
 
-    public function streamKeyset(string $entity, int $batchSize = 1000, ?string $since = null): \Generator
+    /**
+     * @param callable|null $onPage recoit les identifiants de chaque page avant
+     *                              qu'elle ne soit parcourue, pour permettre un
+     *                              prechargement groupe plutot que du N+1
+     */
+    public function streamKeyset(string $entity, int $batchSize = 1000, ?string $since = null, ?callable $onPage = null): \Generator
     {
         $lastId = 0;
         while (true) {
@@ -51,8 +56,20 @@ class EntityPaginator
                 }
             }
 
-            $count = 0;
+            $pageRows = [];
             foreach ($collection as $row) {
+                $pageRows[] = $row;
+            }
+            if (null !== $onPage && [] !== $pageRows) {
+                $ids = [];
+                foreach ($pageRows as $row) {
+                    $ids[] = (int) $row->getData($idField);
+                }
+                $onPage($ids);
+            }
+
+            $count = 0;
+            foreach ($pageRows as $row) {
                 yield $row;
                 $lastId = (int) $row->getData($idField);
                 ++$count;

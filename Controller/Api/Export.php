@@ -58,7 +58,10 @@ class Export extends AbstractApiAction implements HttpGetActionInterface
         $rows = [];
         $skip = ($page - 1) * $perPage;
         $index = 0;
-        foreach ($this->paginator->streamKeyset($type, min(1000, max($perPage, 100)), $since) as $row) {
+        $prefetch = function (array $ids) use ($type): void {
+            $this->serializer->prefetchRelated($type, $ids);
+        };
+        foreach ($this->paginator->streamKeyset($type, min(1000, max($perPage, 100)), $since, $prefetch) as $row) {
             if ($index++ < $skip) {
                 continue;
             }

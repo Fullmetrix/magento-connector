@@ -38,7 +38,10 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         $totalCount = 0;
         foreach ($entities as $currentEntity) {
             $count = 0;
-            foreach ($this->paginator->streamKeyset($currentEntity, 1000, $since) as $row) {
+            $prefetch = function (array $ids) use ($currentEntity): void {
+                $this->serializer->prefetchRelated($currentEntity, $ids);
+            };
+            foreach ($this->paginator->streamKeyset($currentEntity, 1000, $since, $prefetch) as $row) {
                 $payload = $this->serializeRow($currentEntity, $row);
                 if (null === $payload) {
                     continue;

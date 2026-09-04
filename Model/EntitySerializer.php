@@ -75,6 +75,38 @@ class EntitySerializer
         'order_currency_code', 'customer_note', 'created_at', 'updated_at',
     ];
 
+    private const MAX_RELATED_TABLES = 20;
+
+    /**
+     * Prefixes des modules du coeur Magento. Tout ce qui ne commence pas par
+     * l'un d'eux est considere comme une table de module tiers, ce qui vise
+     * juste sans avoir a maintenir la liste des centaines de tables du coeur.
+     */
+    private const CORE_TABLE_PREFIXES = [
+        'admin_', 'adminnotification_', 'authorization_', 'cache', 'captcha_',
+        'catalog_', 'cataloginventory_', 'catalogrule_', 'catalogsearch_',
+        'checkout_', 'cms_', 'core_', 'cron_', 'customer_', 'design_',
+        'directory_', 'downloadable_', 'eav_', 'email_', 'flag', 'gift_',
+        'import', 'importexport_', 'indexer_', 'integration', 'inventory_',
+        'layout_', 'login_as_', 'magento_', 'mview_', 'newsletter_', 'oauth_',
+        'patch_list', 'paypal_', 'persistent_', 'product_alert_', 'quote',
+        'rating_', 'release_notification_', 'report_', 'reporting_', 'review',
+        'sales_', 'salesrule_', 'search_', 'sendfriend_', 'session',
+        'setup_module', 'shipping_', 'sitemap', 'store', 'tax_', 'theme',
+        'translation', 'ui_bookmark', 'url_rewrite', 'variable', 'vault_',
+        'weee_', 'widget', 'wishlist', 'password_reset_request_event',
+        'queue', 'amazon_', 'braintree_', 'klarna_', 'msp_', 'signifyd_',
+    ];
+
+    private const RELATED_FK_BY_ENTITY = [
+        'orders' => 'order_id',
+        'customers' => 'customer_id',
+        'products' => 'product_id',
+    ];
+
+    private array $relatedTablesCache = [];
+    private array $relatedMetaCache = [];
+
     private ?array $categoryNameCache = null;
     private ?array $customerGroupCache = null;
     private ?array $productSalesCache = null;
@@ -214,6 +246,7 @@ class EntitySerializer
             'payments' => $payments,
             'refunds' => $refundDates,
             'meta_data' => array_merge(
+                $this->relatedMetaFor('orders', (int) $order->getEntityId()),
                 $this->extraAttributesMeta($order->getData(), self::ORDER_MAPPED_KEYS),
                 null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
                 null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
@@ -285,6 +318,7 @@ class EntitySerializer
             'date_created' => $this->iso((string) $customer->getCreatedAt()),
             'date_modified' => $this->iso((string) $customer->getUpdatedAt()),
             'meta_data' => array_merge(
+                $this->relatedMetaFor('customers', (int) $customer->getId()),
                 $this->extraAttributesMeta($customer->getData(), self::CUSTOMER_MAPPED_KEYS),
                 null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
                 null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
@@ -436,7 +470,10 @@ class EntitySerializer
             'total_sales' => $this->productSales((int) $product->getId()),
             'date_created' => $this->iso((string) $product->getCreatedAt()),
             'date_modified' => $this->iso((string) $product->getUpdatedAt()),
-            'meta_data' => $this->extraAttributesMeta($product->getData(), self::PRODUCT_MAPPED_KEYS),
+            'meta_data' => array_merge(
+                $this->relatedMetaFor('products', (int) $product->getId()),
+                $this->extraAttributesMeta($product->getData(), self::PRODUCT_MAPPED_KEYS)
+            ),
         ];
     }
 
@@ -1106,6 +1143,124 @@ class EntitySerializer
      * Cut on a character boundary: a byte-level cut splits a multibyte
      * character in two, which is enough to make the payload unserializable.
      */
+    /**
+     * Precharge, pour une page entiere, les lignes des tables de modules tiers
+     * portant la cle etrangere de l'entite. Sans ce prechargement le
+     * serialiseur, qui travaille ligne par ligne, ferait du N+1.
+     *
+     * @param list<int> $ids
+     */
+    public function prefetchRelated(string $entity, array $ids): void
+    {
+        $fkColumn = self::RELATED_FK_BY_ENTITY[$entity] ?? null;
+        if (null === $fkColumn || [] === $ids) {
+            return;
+        }
+
+        $this->relatedMetaCache[$fkColumn] = [];
+        $idList = implode(',', array_map('intval', $ids));
+
+        foreach ($this->detectRelatedTables($fkColumn) as $table => $pkColumn) {
+            $where = '`' . $fkColumn . '` IN (' . $idList . ')';
+            if ('' !== $pkColumn && $pkColumn !== $fkColumn) {
+                // Une seule ligne par entite, decidee en SQL: une table de
+                // journal ne doit jamais etre chargee entiere.
+                $where = '(`' . $fkColumn . '`, `' . $pkColumn . '`) IN ('
+                    . 'SELECT `' . $fkColumn . '`, MAX(`' . $pkColumn . '`) FROM `' . $table . '`'
+                    . ' WHERE `' . $fkColumn . '` IN (' . $idList . ') GROUP BY `' . $fkColumn . '`)';
+            }
+            try {
+                $connection = $this->resourceConnection->getConnection();
+                $rows = $connection->fetchAll('SELECT * FROM `' . $table . '` WHERE ' . $where);
+            } catch (\Throwable) {
+                continue;
+            }
+            $short = $table;
+            foreach ($rows as $row) {
+                $id = (int) ($row[$fkColumn] ?? 0);
+                if (0 === $id) {
+                    continue;
+                }
+                $this->relatedMetaCache[$fkColumn][$id] = array_merge(
+                    $this->relatedMetaCache[$fkColumn][$id] ?? [],
+                    $this->extraAttributesMeta($row, ['entity_id', 'id', $fkColumn], $short . '_')
+                );
+            }
+        }
+    }
+
+    /**
+     * @return array<string, string> nom de table => colonne de cle primaire
+     */
+    private function detectRelatedTables(string $fkColumn): array
+    {
+        if (isset($this->relatedTablesCache[$fkColumn])) {
+            return $this->relatedTablesCache[$fkColumn];
+        }
+
+        $tables = [];
+        try {
+            $connection = $this->resourceConnection->getConnection();
+            $rows = $connection->fetchAll(
+                'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column
+                 FROM information_schema.COLUMNS c
+                 LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+                        ON (k.TABLE_SCHEMA = c.TABLE_SCHEMA AND k.TABLE_NAME = c.TABLE_NAME
+                            AND k.CONSTRAINT_NAME = \'PRIMARY\')
+                 WHERE c.TABLE_SCHEMA = DATABASE()
+                   AND EXISTS (
+                       SELECT 1 FROM information_schema.COLUMNS f
+                       WHERE f.TABLE_SCHEMA = c.TABLE_SCHEMA AND f.TABLE_NAME = c.TABLE_NAME
+                         AND f.COLUMN_NAME = ?
+                   )
+                 GROUP BY c.TABLE_NAME
+                 HAVING COUNT(*) > 1
+                 ORDER BY c.TABLE_NAME',
+                [$fkColumn]
+            );
+        } catch (\Throwable) {
+            $this->relatedTablesCache[$fkColumn] = [];
+
+            return [];
+        }
+
+        foreach ($rows as $row) {
+            $name = (string) $row['table_name'];
+            if ($this->isCoreTable($name)) {
+                continue;
+            }
+            $tables[$name] = (string) ($row['pk_column'] ?? '');
+            if (\count($tables) >= self::MAX_RELATED_TABLES) {
+                break;
+            }
+        }
+
+        $this->relatedTablesCache[$fkColumn] = $tables;
+
+        return $tables;
+    }
+
+    private function isCoreTable(string $table): bool
+    {
+        foreach (self::CORE_TABLE_PREFIXES as $prefix) {
+            if (str_starts_with($table, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<array{key: string, value: string}>
+     */
+    private function relatedMetaFor(string $entity, int $id): array
+    {
+        $fkColumn = self::RELATED_FK_BY_ENTITY[$entity] ?? null;
+
+        return null === $fkColumn ? [] : ($this->relatedMetaCache[$fkColumn][$id] ?? []);
+    }
+
     /**
      * @param list<array{key: string, value: string}> $metaData
      * @param list<array{key: string, value: string}> $extras
