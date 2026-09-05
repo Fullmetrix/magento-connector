@@ -30,12 +30,21 @@ class Config
     private const CONFIG_FAILURE_TTL_SECONDS = 300;
     private const SYNC_STALE_AFTER_SECONDS = 600;
 
+    /**
+     * @param FlagManager $flagManager
+     * @param ScopeConfigInterface $scopeConfig
+     */
     public function __construct(
         private readonly FlagManager $flagManager,
         private readonly ScopeConfigInterface $scopeConfig,
     ) {
     }
 
+    /**
+     * Returns the Fullmetrix plugin API base URL.
+     *
+     * @return string
+     */
     public function getApiBase(): string
     {
         $override = $this->flagManager->getFlagData(self::FLAG_API_BASE_OVERRIDE);
@@ -47,9 +56,15 @@ class Config
         return rtrim('' !== trim($configured) ? trim($configured) : 'https://fullmetrix.com/api/plugin', '/');
     }
 
+    /**
+     * Returns the origin of the Fullmetrix application.
+     *
+     * @return string
+     */
     public function getAppOrigin(): string
     {
         $base = $this->getApiBase();
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
         $parts = parse_url($base);
         if (false === $parts || empty($parts['host'])) {
             return 'https://fullmetrix.com';
@@ -62,6 +77,11 @@ class Config
         return $origin;
     }
 
+    /**
+     * Returns the connection code entered by the merchant.
+     *
+     * @return string
+     */
     public function getConnectionCode(): string
     {
         $value = $this->flagManager->getFlagData(self::FLAG_CONNECTION_CODE);
@@ -69,6 +89,11 @@ class Config
         return \is_string($value) ? $value : '';
     }
 
+    /**
+     * Returns the shared secret used to sign requests.
+     *
+     * @return string
+     */
     public function getConnectionSecret(): string
     {
         $value = $this->flagManager->getFlagData(self::FLAG_CONNECTION_SECRET);
@@ -76,6 +101,11 @@ class Config
         return \is_string($value) ? $value : '';
     }
 
+    /**
+     * Tells whether the store is paired with a Fullmetrix account.
+     *
+     * @return bool
+     */
     public function isRegistered(): bool
     {
         return (bool) $this->flagManager->getFlagData(self::FLAG_REGISTERED)
@@ -83,6 +113,11 @@ class Config
             && '' !== $this->getConnectionSecret();
     }
 
+    /**
+     * Tells whether webhooks may be sent.
+     *
+     * @return bool
+     */
     public function areWebhooksEnabled(): bool
     {
         $value = $this->flagManager->getFlagData(self::FLAG_WEBHOOKS_ENABLED);
@@ -90,11 +125,24 @@ class Config
         return null === $value ? true : (bool) $value;
     }
 
+    /**
+     * Tells whether the connector is registered and allowed to send data.
+     *
+     * @return bool
+     */
     public function isActive(): bool
     {
         return $this->isRegistered() && $this->areWebhooksEnabled();
     }
 
+    /**
+     * Stores the credentials returned by Fullmetrix after pairing.
+     *
+     * @param string $code
+     * @param string $secret
+     * @param int $storeId
+     * @return void
+     */
     public function saveConnection(string $code, string $secret, int $storeId): void
     {
         $this->flagManager->saveFlag(self::FLAG_CONNECTION_CODE, $code);
@@ -106,6 +154,12 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
     }
 
+    /**
+     * Returns a stable identifier for a store view of this installation.
+     *
+     * @param int $storeId
+     * @return string
+     */
     public function getStoreCanonicalId(int $storeId): string
     {
         $installationId = $this->flagManager->getFlagData(self::FLAG_INSTALLATION_ID);
@@ -117,6 +171,11 @@ class Config
         return hash('sha256', $installationId . ':' . $storeId);
     }
 
+    /**
+     * Erases every trace of the current connection.
+     *
+     * @return void
+     */
     public function clearConnection(): void
     {
         $this->flagManager->deleteFlag(self::FLAG_CONNECTION_CODE);
@@ -131,6 +190,12 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_SYNC_IN_PROGRESS);
     }
 
+    /**
+     * Records that an export has started.
+     *
+     * @param string $syncType
+     * @return void
+     */
     public function markSyncStarted(string $syncType): void
     {
         $this->flagManager->saveFlag(self::FLAG_SYNC_IN_PROGRESS, [
@@ -140,7 +205,10 @@ class Config
     }
 
     /**
-     * @param array<string, int> $counts
+     * Records the row counts of a finished export.
+     *
+     * @param array $counts
+     * @return void
      */
     public function markSyncCompleted(array $counts): void
     {
@@ -160,6 +228,11 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_SYNC_IN_PROGRESS);
     }
 
+    /**
+     * Tells whether an export is running, clearing the flag once it goes stale.
+     *
+     * @return bool
+     */
     public function isSyncInProgress(): bool
     {
         $value = $this->flagManager->getFlagData(self::FLAG_SYNC_IN_PROGRESS);
@@ -178,7 +251,9 @@ class Config
     }
 
     /**
-     * @return array<string, int>
+     * Returns the row count exported per entity during the last sync.
+     *
+     * @return array
      */
     public function getLastSyncEntities(): array
     {
@@ -195,6 +270,11 @@ class Config
         return $entities;
     }
 
+    /**
+     * Tells whether at least one export has completed.
+     *
+     * @return bool
+     */
     public function hasCompletedSync(): bool
     {
         $value = $this->flagManager->getFlagData(self::FLAG_LAST_SYNC);
@@ -202,6 +282,11 @@ class Config
         return \is_array($value) && (int) ($value['completed_at'] ?? 0) > 0;
     }
 
+    /**
+     * Returns the plugin configuration pulled from Fullmetrix, if still fresh.
+     *
+     * @return ?array
+     */
     public function getCachedPluginConfig(): ?array
     {
         $storedAt = (int) $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG_AT);
@@ -213,6 +298,11 @@ class Config
         return \is_array($data) ? $data : null;
     }
 
+    /**
+     * Returns the last plugin configuration pulled, however old it is.
+     *
+     * @return ?array
+     */
     public function getStalePluginConfig(): ?array
     {
         $data = $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG);
@@ -220,6 +310,11 @@ class Config
         return \is_array($data) ? $data : null;
     }
 
+    /**
+     * Tells whether a failed configuration fetch should not be retried yet.
+     *
+     * @return bool
+     */
     public function isPluginConfigFetchOnCooldown(): bool
     {
         $failedAt = (int) $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
@@ -227,6 +322,12 @@ class Config
         return $failedAt > 0 && (time() - $failedAt) < self::CONFIG_FAILURE_TTL_SECONDS;
     }
 
+    /**
+     * Stores the plugin configuration pulled from Fullmetrix.
+     *
+     * @param array $config
+     * @return void
+     */
     public function savePluginConfig(array $config): void
     {
         $this->flagManager->saveFlag(self::FLAG_PLUGIN_CONFIG, $config);
@@ -234,11 +335,22 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
     }
 
+    /**
+     * Records that pulling the plugin configuration failed.
+     *
+     * @return void
+     */
     public function markPluginConfigFetchFailed(): void
     {
         $this->flagManager->saveFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT, time());
     }
 
+    /**
+     * Overrides the API base URL, or clears the override.
+     *
+     * @param string|null $apiBase
+     * @return void
+     */
     public function setApiBaseOverride(?string $apiBase): void
     {
         if (null === $apiBase || '' === trim($apiBase)) {
@@ -249,6 +361,11 @@ class Config
         $this->flagManager->saveFlag(self::FLAG_API_BASE_OVERRIDE, rtrim(trim($apiBase), '/'));
     }
 
+    /**
+     * Asks the next export to resend every product.
+     *
+     * @return void
+     */
     public function markAllProductsForRefresh(): void
     {
         if ($this->isRegistered()) {
@@ -256,11 +373,21 @@ class Config
         }
     }
 
+    /**
+     * Tells whether every product must be resent.
+     *
+     * @return bool
+     */
     public function shouldRefreshAllProducts(): bool
     {
         return (bool) $this->flagManager->getFlagData(self::FLAG_REFRESH_ALL_PRODUCTS);
     }
 
+    /**
+     * Clears the request to resend every product.
+     *
+     * @return void
+     */
     public function clearAllProductsRefresh(): void
     {
         $this->flagManager->deleteFlag(self::FLAG_REFRESH_ALL_PRODUCTS);

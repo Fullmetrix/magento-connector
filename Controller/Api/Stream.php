@@ -9,8 +9,23 @@ use Fullmetrix\Connector\Model\EntityPaginator;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 
+/**
+ * Streams every supported entity to Fullmetrix as newline delimited JSON.
+ */
 class Stream extends AbstractApiAction implements HttpGetActionInterface
 {
+    /**
+     * Output stream the NDJSON lines are written to.
+     *
+     * @var resource|null
+     */
+    private $outputHandle = null;
+
+    /**
+     * Streams the requested entity, or every entity when none is given.
+     *
+     * @return ResultInterface
+     */
     public function execute(): ResultInterface
     {
         if (!$this->verifier->verify($this->request)) {
@@ -61,32 +76,54 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
 
         $this->emit(['type' => 'done', 'completed_at' => $this->isoNow(), 'count' => $totalCount]);
 
+        // The body is already written and flushed, letting Magento render a response would corrupt the stream.
+        // phpcs:ignore Magento2.Security.LanguageConstruct.ExitUsage
         exit(0);
     }
 
-    private $outputHandle = null;
-
+    /**
+     * Opens the raw output stream and disables every layer of buffering.
+     *
+     * The response object is bypassed on purpose: it buffers the whole body in memory,
+     * which defeats streaming exports of several hundred thousand rows.
+     *
+     * @return void
+     */
     private function sendStreamHeaders(): void
     {
         if (!headers_sent()) {
+            // phpcs:disable Magento2.Functions.DiscouragedFunction
             header('Content-Type: application/x-ndjson');
             header('X-Accel-Buffering: no');
             header('Cache-Control: no-cache');
+            // phpcs:enable Magento2.Functions.DiscouragedFunction
         }
         while (ob_get_level() > 0) {
             ob_end_flush();
         }
+        // phpcs:disable Magento2.Functions.DiscouragedFunction
         set_time_limit(0);
         ignore_user_abort(false);
         $this->outputHandle = fopen('php://output', 'wb');
+        // phpcs:enable Magento2.Functions.DiscouragedFunction
     }
 
+    /**
+     * Writes a single NDJSON line and flushes it to the client.
+     *
+     * @param array $row
+     * @return void
+     */
     private function emit(array $row): void
     {
         if (null === $this->outputHandle) {
             return;
         }
-        fwrite($this->outputHandle, (json_encode($row, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: '{}') . "\n");
+
+        $encoded = json_encode($row, \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES) ?: '{}';
+
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        fwrite($this->outputHandle, $encoded . "\n");
         flush();
     }
 }
