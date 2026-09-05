@@ -291,25 +291,6 @@ class EntitySerializer
             $newsletter = $subscriber->isSubscribed();
         } catch (\Throwable) {
         }
-        if (null === $mainImageUrl) {
-            $imageFile = (string) $product->getImage();
-            if ('' !== $imageFile && 'no_selection' !== $imageFile) {
-                try {
-                    $mediaBase = rtrim((string) $this->storeSettings->getStore()->getBaseUrl(
-                        \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
-                    ), '/');
-                    $mainImageUrl = $mediaBase . '/catalog/product' . $imageFile;
-                    $images[] = [
-                        'id' => 0,
-                        'src' => $mainImageUrl,
-                        'alt' => (string) $product->getName(),
-                        'position' => 0,
-                    ];
-                } catch (\Throwable) {
-                }
-            }
-        }
-
         $payload = [
             'id' => (int) $customer->getId(),
             'email' => (string) $customer->getEmail(),
@@ -392,6 +373,26 @@ class EntitySerializer
                 ];
             }
         } catch (\Throwable) {
+        }
+
+        // Repli quand la galerie est vide: l'attribut image du produit.
+        if (null === $mainImageUrl) {
+            $imageFile = (string) $product->getImage();
+            if ('' !== $imageFile && 'no_selection' !== $imageFile) {
+                try {
+                    $mediaBase = rtrim((string) $this->storeSettings->getStore()->getBaseUrl(
+                        \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
+                    ), '/');
+                    $mainImageUrl = $mediaBase . '/catalog/product' . $imageFile;
+                    $images[] = [
+                        'id' => 0,
+                        'src' => $mainImageUrl,
+                        'alt' => (string) $product->getName(),
+                        'position' => 0,
+                    ];
+                } catch (\Throwable) {
+                }
+            }
         }
 
         $price = (float) $product->getPrice();
@@ -1173,6 +1174,12 @@ class EntitySerializer
         }
 
         $ids = array_values(array_unique(array_map('intval', $ids)));
+        // Purge par page: garder tous les identifiants d'un flux d'un million de
+        // commandes ferait grossir la memoire jusqu'a la fin de la synchro.
+        if (\count($ids) > 1) {
+            $this->relatedMetaCache[$fkColumn] = [];
+            $this->relatedFetchedIds[$fkColumn] = [];
+        }
         $this->relatedFetchedIds[$fkColumn] = ($this->relatedFetchedIds[$fkColumn] ?? []) + array_fill_keys($ids, true);
         $idList = implode(',', $ids);
 
@@ -1226,7 +1233,7 @@ class EntitySerializer
             $connection = $this->resourceConnection->getConnection();
             $rows = $connection->fetchAll(
                 'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column,
-                        GROUP_CONCAT(
+                        GROUP_CONCAT(DISTINCT
                             CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\', \'tinyblob\', \'binary\', \'varbinary\')
                                  THEN NULL ELSE c.COLUMN_NAME END
                         ) AS safe_columns
@@ -1272,8 +1279,16 @@ class EntitySerializer
 
     private function isCoreTable(string $table): bool
     {
-        foreach (self::CORE_TABLE_PREFIXES as $prefix) {
-            if (str_starts_with($table, $prefix)) {
+        // Une installation peut avoir un prefixe de tables: sans le retirer,
+        // mag_vault_payment_token ne commencerait par aucun prefixe du coeur et
+        // tout le coeur passerait pour une table tierce.
+        $prefix = (string) $this->resourceConnection->getTablePrefix();
+        if ('' !== $prefix && str_starts_with($table, $prefix)) {
+            $table = substr($table, \strlen($prefix));
+        }
+
+        foreach (self::CORE_TABLE_PREFIXES as $corePrefix) {
+            if (str_starts_with($table, $corePrefix)) {
                 return true;
             }
         }
