@@ -67,7 +67,7 @@ class HttpClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $timeoutSeconds,
             CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_NOSIGNAL => 1,
+            CURLOPT_NOSIGNAL => true,
         ]);
         // The connector needs the raw call here, the Magento wrapper does not cover it.
         // phpcs:ignore Magento2.Functions.DiscouragedFunction
@@ -112,7 +112,7 @@ class HttpClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT_MS => $detached ? 3000 : 800,
             CURLOPT_CONNECTTIMEOUT_MS => $detached ? 2000 : 300,
-            CURLOPT_NOSIGNAL => 1,
+            CURLOPT_NOSIGNAL => true,
             CURLOPT_FOLLOWLOCATION => false,
         ]);
         // The connector needs the raw call here, the Magento wrapper does not cover it.
@@ -155,7 +155,7 @@ class HttpClient
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT_MS => $detached ? 2000 : 800,
             CURLOPT_CONNECTTIMEOUT_MS => $detached ? 1000 : 300,
-            CURLOPT_NOSIGNAL => 1,
+            CURLOPT_NOSIGNAL => true,
             CURLOPT_FOLLOWLOCATION => false,
         ]);
         // The connector needs the raw call here, the Magento wrapper does not cover it.
