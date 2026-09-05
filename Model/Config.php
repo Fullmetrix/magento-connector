@@ -22,10 +22,13 @@ class Config
     public const FLAG_STORE_ID = 'fullmetrix_store_id';
     public const FLAG_INSTALLATION_ID = 'fullmetrix_installation_id';
     public const FLAG_REFRESH_ALL_PRODUCTS = 'fullmetrix_refresh_all_products';
+    public const FLAG_LAST_SYNC = 'fullmetrix_last_sync';
+    public const FLAG_SYNC_IN_PROGRESS = 'fullmetrix_sync_in_progress';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
     private const CONFIG_TTL_SECONDS = 1800;
     private const CONFIG_FAILURE_TTL_SECONDS = 300;
+    private const SYNC_STALE_AFTER_SECONDS = 600;
 
     public function __construct(
         private readonly FlagManager $flagManager,
@@ -124,6 +127,79 @@ class Config
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_AT);
         $this->flagManager->deleteFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
         $this->flagManager->deleteFlag(self::FLAG_REFRESH_ALL_PRODUCTS);
+        $this->flagManager->deleteFlag(self::FLAG_LAST_SYNC);
+        $this->flagManager->deleteFlag(self::FLAG_SYNC_IN_PROGRESS);
+    }
+
+    public function markSyncStarted(string $syncType): void
+    {
+        $this->flagManager->saveFlag(self::FLAG_SYNC_IN_PROGRESS, [
+            'started_at' => time(),
+            'type' => $syncType,
+        ]);
+    }
+
+    /**
+     * @param array<string, int> $counts
+     */
+    public function markSyncCompleted(array $counts): void
+    {
+        $previous = $this->flagManager->getFlagData(self::FLAG_LAST_SYNC);
+        $entities = \is_array($previous) && \is_array($previous['entities'] ?? null)
+            ? $previous['entities']
+            : [];
+
+        foreach ($counts as $entity => $count) {
+            $entities[$entity] = (int) $count;
+        }
+
+        $this->flagManager->saveFlag(self::FLAG_LAST_SYNC, [
+            'completed_at' => time(),
+            'entities' => $entities,
+        ]);
+        $this->flagManager->deleteFlag(self::FLAG_SYNC_IN_PROGRESS);
+    }
+
+    public function isSyncInProgress(): bool
+    {
+        $value = $this->flagManager->getFlagData(self::FLAG_SYNC_IN_PROGRESS);
+        if (!\is_array($value)) {
+            return false;
+        }
+
+        $startedAt = (int) ($value['started_at'] ?? 0);
+        if ($startedAt <= 0 || (time() - $startedAt) > self::SYNC_STALE_AFTER_SECONDS) {
+            $this->flagManager->deleteFlag(self::FLAG_SYNC_IN_PROGRESS);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function getLastSyncEntities(): array
+    {
+        $value = $this->flagManager->getFlagData(self::FLAG_LAST_SYNC);
+        if (!\is_array($value) || !\is_array($value['entities'] ?? null)) {
+            return [];
+        }
+
+        $entities = [];
+        foreach ($value['entities'] as $entity => $count) {
+            $entities[(string) $entity] = (int) $count;
+        }
+
+        return $entities;
+    }
+
+    public function hasCompletedSync(): bool
+    {
+        $value = $this->flagManager->getFlagData(self::FLAG_LAST_SYNC);
+
+        return \is_array($value) && (int) ($value['completed_at'] ?? 0) > 0;
     }
 
     public function getCachedPluginConfig(): ?array

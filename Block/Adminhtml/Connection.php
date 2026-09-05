@@ -54,4 +54,27 @@ class Connection extends Template
     {
         return (string) $this->storeSettings->getStore()->getName();
     }
+
+    public function getLogoUrl(): string
+    {
+        return $this->getViewFileUrl('Fullmetrix_Connector::images/logo.png');
+    }
+
+    public function isSyncInProgress(): bool
+    {
+        return $this->config->isSyncInProgress();
+    }
+
+    public function hasCompletedSync(): bool
+    {
+        return $this->config->hasCompletedSync();
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    public function getLastSyncEntities(): array
+    {
+        return $this->config->getLastSyncEntities();
+    }
 }

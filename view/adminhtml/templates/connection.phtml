@@ -1,53 +1,128 @@
 <?php
 /** @var \Fullmetrix\Connector\Block\Adminhtml\Connection $block */
+/** @var \Magento\Framework\Escaper $escaper */
+
+$registered = $block->isRegistered();
+$steps = [
+    __('Create your Fullmetrix account at fullmetrix.com'),
+    __('Copy the connection code shown in your Fullmetrix dashboard'),
+    __('Paste the code below and click Connect'),
+];
 ?>
-<div class="fullmetrix-connection" style="max-width: 640px;">
-    <?php if ($block->isRegistered()): ?>
-        <div class="message message-success success">
-            <div><?= $escaper->escapeHtml(__('Boutique connectée à Fullmetrix avec le code %1.', $block->getConnectionCode())) ?></div>
-            <div><?= $escaper->escapeHtml(__('Vue boutique : %1', $block->getConnectedStoreLabel())) ?></div>
+<div class="fullmetrix-panel" style="max-width:760px;">
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+        <div style="display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid #f0f0f0;margin-bottom:<?= $registered ? '18' : '22' ?>px;">
+            <img src="<?= $escaper->escapeUrl($block->getLogoUrl()) ?>" alt="Fullmetrix"
+                 style="width:52px;height:52px;border-radius:13px;box-shadow:0 1px 4px rgba(0,0,0,0.12);"/>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:21px;font-weight:700;color:#1a1a1a;line-height:1.2;">Fullmetrix</div>
+                <div style="font-size:13px;color:#6b7280;margin-top:3px;">
+                    <?= $escaper->escapeHtml(__('E-commerce analytics and reporting')) ?>
+                </div>
+            </div>
+            <?php if ($registered): ?>
+                <span style="display:inline-flex;align-items:center;gap:7px;background:#e8f6ee;color:#1a8245;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;white-space:nowrap;">
+                    <span style="width:9px;height:9px;border-radius:999px;background:#1a8245;"></span>
+                    <?= $escaper->escapeHtml(__('Connected')) ?>
+                </span>
+            <?php endif; ?>
         </div>
-        <p>
-            <a class="action-default" href="<?= $escaper->escapeUrl($block->getAppUrl()) ?>" target="_blank" rel="noopener">
-                <?= $escaper->escapeHtml(__('Ouvrir le tableau de bord Fullmetrix')) ?>
-            </a>
-        </p>
-        <form action="<?= $escaper->escapeUrl($block->getDisconnectUrl()) ?>" method="post">
-            <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
-            <button type="submit" class="action-secondary">
-                <?= $escaper->escapeHtml(__('Déconnecter la boutique')) ?>
-            </button>
-        </form>
-    <?php else: ?>
-        <p><?= $escaper->escapeHtml(__('Collez votre code de connexion Fullmetrix (format FMTX-XXXX-XXXX-XXXX) pour connecter cette boutique.')) ?></p>
-        <form action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" method="post">
-            <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
-            <div class="admin__field">
-                <label class="admin__field-label" for="fullmetrix_connection_code">
-                    <?= $escaper->escapeHtml(__('Code de connexion')) ?>
+
+        <?php if ($registered): ?>
+            <label for="fullmetrix_connection_code" style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">
+                <?= $escaper->escapeHtml(__('Connection code')) ?>
+            </label>
+            <form action="<?= $escaper->escapeUrl($block->getDisconnectUrl()) ?>" method="post"
+                  style="margin:0;display:flex;gap:10px;align-items:stretch;">
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                <input type="text" id="fullmetrix_connection_code" value="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>" readonly
+                       style="flex:1;min-width:0;box-sizing:border-box;height:50px;font-family:monospace;font-size:16px;letter-spacing:1px;background:#f8f9fa;border:1px solid #dfe3e8;border-radius:8px;padding:0 16px;color:#333;"/>
+                <button type="submit"
+                        style="height:50px;padding:0 22px;font-size:14px;font-weight:600;white-space:nowrap;background:#fff;border:1px solid #dfe3e8;border-radius:8px;color:#374151;cursor:pointer;">
+                    <?= $escaper->escapeHtml(__('Disconnect')) ?>
+                </button>
+            </form>
+            <p style="margin:14px 0 0;font-size:13px;color:#6b7280;">
+                <?= $escaper->escapeHtml(__('Store view: %1', $block->getConnectedStoreLabel())) ?>
+                &middot;
+                <a href="<?= $escaper->escapeUrl($block->getAppUrl()) ?>" target="_blank" rel="noopener"
+                   style="color:#2469fe;font-weight:600;text-decoration:none;">
+                    <?= $escaper->escapeHtml(__('Open the Fullmetrix dashboard')) ?>
+                </a>
+            </p>
+        <?php else: ?>
+            <ol style="list-style:none;margin:0 0 22px;padding:0;">
+                <?php foreach ($steps as $index => $step): ?>
+                    <li style="display:flex;align-items:flex-start;gap:12px;margin-bottom:<?= $index === count($steps) - 1 ? '0' : '14' ?>px;">
+                        <span style="flex-shrink:0;width:26px;height:26px;border-radius:999px;background:#2469fe;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;"><?= (int) $index + 1 ?></span>
+                        <span style="font-size:14px;color:#333;line-height:1.5;padding-top:2px;"><?= $escaper->escapeHtml($step) ?></span>
+                    </li>
+                <?php endforeach; ?>
+            </ol>
+
+            <form action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" method="post" style="margin:0;">
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+
+                <label for="fullmetrix_store_id" style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">
+                    <?= $escaper->escapeHtml(__('Store view')) ?>
                 </label>
-                <div class="admin__field-control">
-                    <input type="text" class="admin__control-text" id="fullmetrix_connection_code" name="connection_code" placeholder="FMTX-XXXX-XXXX-XXXX" style="max-width: 320px;"/>
-                </div>
-            </div>
-            <div class="admin__field">
-                <label class="admin__field-label" for="fullmetrix_store_id">
-                    <?= $escaper->escapeHtml(__('Vue boutique')) ?>
+                <select id="fullmetrix_store_id" name="store_id"
+                        style="box-sizing:border-box;height:52px;min-width:260px;max-width:100%;border:1px solid #dfe3e8;border-radius:8px;padding:0 16px;font-size:15px;color:#333;background:#fff;margin-bottom:18px;">
+                    <?php foreach ($block->getAvailableStores() as $store): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr((string) $store['id']) ?>">
+                            <?= $escaper->escapeHtml($store['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label for="fullmetrix_connection_code" style="display:block;font-size:14px;font-weight:600;color:#374151;margin-bottom:8px;">
+                    <?= $escaper->escapeHtml(__('Connection code')) ?>
                 </label>
-                <div class="admin__field-control">
-                    <select class="admin__control-select" id="fullmetrix_store_id" name="store_id">
-                        <?php foreach ($block->getAvailableStores() as $store): ?>
-                            <option value="<?= $escaper->escapeHtmlAttr((string) $store['id']) ?>">
-                                <?= $escaper->escapeHtml($store['label']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
+                <div style="display:flex;gap:10px;align-items:stretch;">
+                    <input type="text" id="fullmetrix_connection_code" name="connection_code" placeholder="FMTX-XXXX-XXXX-XXXX" required
+                           style="flex:1;min-width:0;box-sizing:border-box;height:52px;font-family:monospace;font-size:16px;letter-spacing:1px;background:#fff;border:1px solid #dfe3e8;border-radius:8px;padding:0 16px;color:#333;"/>
+                    <button type="submit"
+                            style="height:52px;background:#2469fe;border:1px solid #2469fe;color:#fff;font-weight:600;font-size:15px;padding:0 30px;border-radius:8px;cursor:pointer;white-space:nowrap;">
+                        <?= $escaper->escapeHtml(__('Connect')) ?>
+                    </button>
                 </div>
-            </div>
-            <br/>
-            <button type="submit" class="action-primary">
-                <?= $escaper->escapeHtml(__('Connecter la boutique')) ?>
-            </button>
-        </form>
+            </form>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($registered): ?>
+        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-top:20px;">
+            <h2 style="margin:0 0 16px;padding:0;border:0;font-size:18px;font-weight:700;color:#1a1a1a;">
+                <?= $escaper->escapeHtml(__('Sync activity')) ?>
+            </h2>
+
+            <?php if ($block->isSyncInProgress()): ?>
+                <span style="display:inline-flex;align-items:center;gap:8px;background:#e7f0ff;color:#2469fe;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;">
+                    <span style="width:9px;height:9px;border-radius:999px;background:#2469fe;"></span>
+                    <?= $escaper->escapeHtml(__('Sync in progress')) ?>
+                </span>
+            <?php elseif ($block->hasCompletedSync()): ?>
+                <span style="display:inline-flex;align-items:center;gap:8px;background:#e8f6ee;color:#1a8245;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;">
+                    <span style="width:9px;height:9px;border-radius:999px;background:#1a8245;"></span>
+                    <?= $escaper->escapeHtml(__('Sync complete')) ?>
+                </span>
+
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:18px;">
+                    <?php foreach ($block->getLastSyncEntities() as $entityLabel => $entityCount): ?>
+                        <?php if ($entityCount > 0): ?>
+                            <div style="text-align:center;background:#f8f8f8;border:1px solid #e0e0e0;border-radius:8px;padding:10px 16px;min-width:80px;">
+                                <div style="font-size:20px;font-weight:700;color:#1a1a1a;line-height:1.2;"><?= $escaper->escapeHtml(number_format((float) $entityCount, 0, ',', ' ')) ?></div>
+                                <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;"><?= $escaper->escapeHtml((string) $entityLabel) ?></div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <span style="display:inline-flex;align-items:center;gap:8px;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:600;padding:8px 16px;border-radius:999px;">
+                    <span style="width:9px;height:9px;border-radius:999px;background:#9ca3af;"></span>
+                    <?= $escaper->escapeHtml(__('Waiting for sync')) ?>
+                </span>
+            <?php endif; ?>
+        </div>
     <?php endif; ?>
 </div>

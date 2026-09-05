@@ -25,6 +25,8 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         $since = $this->parseSince();
         $entities = '' !== $entity ? [$entity] : EntityPaginator::ENTITIES;
 
+        $this->config->markSyncStarted(null === $since ? 'bulk' : 'incremental');
+
         $this->sendStreamHeaders();
 
         $this->emit([
@@ -36,6 +38,7 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         ]);
 
         $totalCount = 0;
+        $counts = [];
         foreach ($entities as $currentEntity) {
             $count = 0;
             $prefetch = function (array $ids) use ($currentEntity): void {
@@ -50,8 +53,11 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
                 ++$count;
             }
             $this->emit(['type' => 'entity_complete', 'entity' => $currentEntity, 'count' => $count]);
+            $counts[$currentEntity] = $count;
             $totalCount += $count;
         }
+
+        $this->config->markSyncCompleted($counts);
 
         $this->emit(['type' => 'done', 'completed_at' => $this->isoNow(), 'count' => $totalCount]);
 
