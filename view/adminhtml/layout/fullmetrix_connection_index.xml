@@ -5,6 +5,7 @@
 >
     <head>
         <css src="Fullmetrix_Connector::css/fullmetrix.css"/>
+        <script src="Fullmetrix_Connector::js/store-select.js" defer="defer"/>
     </head>
     <body>
         <referenceContainer name="content">

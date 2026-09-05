@@ -79,7 +79,12 @@ $steps = [
                 <label class="fullmetrix-label" for="fullmetrix_store_id">
                     <?= $escaper->escapeHtml(__('Store view')) ?>
                 </label>
-                <select class="fullmetrix-select" id="fullmetrix_store_id" name="store_id">
+                <select
+                    class="fullmetrix-select"
+                    id="fullmetrix_store_id"
+                    name="store_id"
+                    data-fullmetrix-select="1"
+                >
                     <?php foreach ($block->getAvailableStores() as $store): ?>
                         <option value="<?= $escaper->escapeHtmlAttr((string) $store['id']) ?>">
                             <?= $escaper->escapeHtml($store['label']) ?>
