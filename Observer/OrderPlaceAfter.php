@@ -15,6 +15,13 @@ use Magento\Sales\Model\Order;
 
 class OrderPlaceAfter implements ObserverInterface
 {
+    /**
+     * @param Config $config
+     * @param TrackingQueue $trackingQueue
+     * @param SubscriberFactory $subscriberFactory
+     * @param StoreScope $storeScope
+     * @param WebhookQueue $webhookQueue
+     */
     public function __construct(
         private readonly Config $config,
         private readonly TrackingQueue $trackingQueue,
@@ -24,6 +31,12 @@ class OrderPlaceAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $order = $observer->getEvent()->getData('order');
@@ -44,6 +57,8 @@ class OrderPlaceAfter implements ObserverInterface
                 'customer_id' => $order->getCustomerId() ? (int) $order->getCustomerId() : null,
                 'identified_at' => (int) round(microtime(true) * 1000),
             ]);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -67,6 +82,8 @@ class OrderPlaceAfter implements ObserverInterface
                 null !== $billing ? (string) $billing->getTelephone() : '',
                 null !== $billing ? (string) $billing->getCountryId() : ''
             );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

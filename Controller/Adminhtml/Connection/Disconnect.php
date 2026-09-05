@@ -13,6 +13,10 @@ class Disconnect extends Action
 {
     public const ADMIN_RESOURCE = 'Fullmetrix_Connector::connection';
 
+    /**
+     * @param Context $context
+     * @param ConnectionManager $connectionManager
+     */
     public function __construct(
         Context $context,
         private readonly ConnectionManager $connectionManager,
@@ -20,6 +24,11 @@ class Disconnect extends Action
         parent::__construct($context);
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @return Redirect
+     */
     public function execute(): Redirect
     {
         $this->connectionManager->disconnect();

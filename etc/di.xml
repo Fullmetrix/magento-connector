@@ -1,21 +1,38 @@
 <?xml version="1.0"?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+<config
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd"
+>
     <type name="Magento\Framework\Console\CommandList">
         <arguments>
             <argument name="commands" xsi:type="array">
                 <item name="fullmetrix_connect" xsi:type="object">Fullmetrix\Connector\Console\ConnectCommand</item>
-                <item name="fullmetrix_disconnect" xsi:type="object">Fullmetrix\Connector\Console\DisconnectCommand</item>
+                <item name="fullmetrix_disconnect" xsi:type="object">
+                    Fullmetrix\Connector\Console\DisconnectCommand
+                </item>
                 <item name="fullmetrix_status" xsi:type="object">Fullmetrix\Connector\Console\StatusCommand</item>
             </argument>
         </arguments>
     </type>
     <type name="Magento\InventoryApi\Api\SourceItemsSaveInterface">
-        <plugin name="fullmetrix_inventory_source_items_save" type="Fullmetrix\Connector\Plugin\InventorySourceItemsSavePlugin" sortOrder="1000"/>
+        <plugin
+            name="fullmetrix_inventory_source_items_save"
+            type="Fullmetrix\Connector\Plugin\InventorySourceItemsSavePlugin"
+            sortOrder="1000"
+        />
     </type>
     <type name="Magento\InventorySales\Model\PlaceReservationsForSalesEvent">
-        <plugin name="fullmetrix_inventory_reservations" type="Fullmetrix\Connector\Plugin\InventoryReservationPlugin" sortOrder="1000"/>
+        <plugin
+            name="fullmetrix_inventory_reservations"
+            type="Fullmetrix\Connector\Plugin\InventoryReservationPlugin"
+            sortOrder="1000"
+        />
     </type>
     <type name="Magento\CatalogRule\Model\Indexer\Rule\RuleProductIndexer">
-        <plugin name="fullmetrix_catalog_rule_indexer" type="Fullmetrix\Connector\Plugin\CatalogRuleIndexerPlugin" sortOrder="1000"/>
+        <plugin
+            name="fullmetrix_catalog_rule_indexer"
+            type="Fullmetrix\Connector\Plugin\CatalogRuleIndexerPlugin"
+            sortOrder="1000"
+        />
     </type>
 </config>

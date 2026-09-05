@@ -13,6 +13,10 @@ class Index extends Action
 {
     public const ADMIN_RESOURCE = 'Fullmetrix_Connector::connection';
 
+    /**
+     * @param Context $context
+     * @param PageFactory $pageFactory
+     */
     public function __construct(
         Context $context,
         private readonly PageFactory $pageFactory,
@@ -20,6 +24,11 @@ class Index extends Action
         parent::__construct($context);
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @return Page
+     */
     public function execute(): Page
     {
         $page = $this->pageFactory->create();

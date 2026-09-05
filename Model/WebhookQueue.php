@@ -6,9 +6,22 @@ namespace Fullmetrix\Connector\Model;
 
 class WebhookQueue
 {
+    /**
+     * @var array
+     */
     private array $queue = [];
+    /**
+     * @var bool
+     */
     private bool $shutdownRegistered = false;
 
+    /**
+     * @param Config $config
+     * @param HmacSigner $signer
+     * @param HttpClient $httpClient
+     * @param Magento\Framework\App\ResourceConnection $resourceConnection
+     * @param Magento\Framework\Lock\LockManagerInterface $lockManager
+     */
     public function __construct(
         private readonly Config $config,
         private readonly HmacSigner $signer,
@@ -18,6 +31,15 @@ class WebhookQueue
     ) {
     }
 
+    /**
+     * Enqueue.
+     *
+     * @param string $entityType
+     * @param int|string $entityId
+     * @param array $data
+     * @param string $event
+     * @return void
+     */
     public function enqueue(string $entityType, int|string $entityId, array $data, string $event): void
     {
         if (!$this->config->isActive()) {
@@ -35,11 +57,27 @@ class WebhookQueue
         $this->registerShutdown();
     }
 
+    /**
+     * Enqueue deleted.
+     *
+     * @param string $entityType
+     * @param int|string $entityId
+     * @return void
+     */
     public function enqueueDeleted(string $entityType, int|string $entityId): void
     {
         $this->enqueue($entityType, $entityId, ['id' => (string) $entityId], 'deleted');
     }
 
+    /**
+     * Enqueue consent.
+     *
+     * @param string $email
+     * @param bool $consent
+     * @param string $phone
+     * @param string $country
+     * @return void
+     */
     public function enqueueConsent(string $email, bool $consent, string $phone = '', string $country = ''): void
     {
         $email = strtolower(trim($email));
@@ -63,6 +101,11 @@ class WebhookQueue
         $this->registerShutdown();
     }
 
+    /**
+     * Flush.
+     *
+     * @return void
+     */
     public function flush(): void
     {
         if (!$this->config->isActive()) {
@@ -78,6 +121,11 @@ class WebhookQueue
         }
     }
 
+    /**
+     * Flush locked.
+     *
+     * @return void
+     */
     private function flushLocked(): void
     {
         HttpClient::finishResponse();
@@ -105,6 +153,8 @@ class WebhookQueue
                     'data' => $data,
                 ];
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
         if (0 === \count($pending)) {
@@ -116,7 +166,8 @@ class WebhookQueue
 
         foreach ($pending as $item) {
             $isConsent = 'consent' === $item['event'];
-            $endpoint = $this->config->getAppOrigin() . ($isConsent ? '/api/checkout-consent' : '/api/webhooks/ecommerce');
+            $path = $isConsent ? '/api/checkout-consent' : '/api/webhooks/ecommerce';
+            $endpoint = $this->config->getAppOrigin() . $path;
             $body = json_encode($isConsent ? [
                 'key' => $this->config->getConnectionCode(),
                 'email' => $item['data']['email'],
@@ -149,6 +200,11 @@ class WebhookQueue
         }
     }
 
+    /**
+     * Clears the.
+     *
+     * @return void
+     */
     public function clear(): void
     {
         $this->queue = [];
@@ -156,10 +212,18 @@ class WebhookQueue
             $this->resourceConnection->getConnection()->delete(
                 $this->resourceConnection->getTableName('fullmetrix_webhook_queue')
             );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }
 
+    /**
+     * Persist.
+     *
+     * @param array $item
+     * @return bool
+     */
     private function persist(array $item): bool
     {
         try {
@@ -187,6 +251,13 @@ class WebhookQueue
         }
     }
 
+    /**
+     * Complete persisted.
+     *
+     * @param array $item
+     * @param bool $sent
+     * @return void
+     */
     private function completePersisted(array $item, bool $sent): void
     {
         try {
@@ -206,19 +277,30 @@ class WebhookQueue
                 ],
                 ['queue_id = ?' => (int) $item['queue_id']]
             );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }
 
+    /**
+     * Register shutdown.
+     *
+     * @return void
+     */
     private function registerShutdown(): void
     {
         if ($this->shutdownRegistered) {
             return;
         }
         $this->shutdownRegistered = true;
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
         register_shutdown_function(function (): void {
             try {
                 $this->flush();
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         });

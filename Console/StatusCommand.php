@@ -13,6 +13,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class StatusCommand extends Command
 {
+    /**
+     * @param Config $config
+     * @param EntityPaginator $paginator
+     * @param State $state
+     */
     public function __construct(
         private readonly Config $config,
         private readonly EntityPaginator $paginator,
@@ -21,16 +26,30 @@ class StatusCommand extends Command
         parent::__construct();
     }
 
+    /**
+     * Configure.
+     *
+     * @return void
+     */
     protected function configure(): void
     {
         $this->setName('fullmetrix:status');
         $this->setDescription('Affiche le statut de la connexion Fullmetrix');
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @return int
+     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
             $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_ADMINHTML);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 

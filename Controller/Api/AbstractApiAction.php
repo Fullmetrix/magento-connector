@@ -14,6 +14,14 @@ use Magento\Framework\Controller\Result\JsonFactory;
 
 abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterface
 {
+    /**
+     * @param RequestInterface $request
+     * @param JsonFactory $jsonFactory
+     * @param HmacRequestVerifier $verifier
+     * @param EntityPaginator $paginator
+     * @param EntitySerializer $serializer
+     * @param Config $config
+     */
     public function __construct(
         protected readonly RequestInterface $request,
         protected readonly JsonFactory $jsonFactory,
@@ -24,6 +32,11 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
     ) {
     }
 
+    /**
+     * Builds an unauthorized result.
+     *
+     * @return Json
+     */
     protected function unauthorized(): Json
     {
         $result = $this->jsonFactory->create();
@@ -33,6 +46,13 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
         return $result;
     }
 
+    /**
+     * Builds a JSON result.
+     *
+     * @param array $data
+     * @param int $status
+     * @return Json
+     */
     protected function json(array $data, int $status = 200): Json
     {
         $result = $this->jsonFactory->create();
@@ -42,6 +62,13 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
         return $result;
     }
 
+    /**
+     * Serializes the row.
+     *
+     * @param string $entity
+     * @param object $row
+     * @return array|null
+     */
     protected function serializeRow(string $entity, object $row): ?array
     {
         return match ($entity) {
@@ -55,6 +82,12 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
         };
     }
 
+    /**
+     * Line type.
+     *
+     * @param string $entity
+     * @return string
+     */
     protected function lineType(string $entity): string
     {
         return match ($entity) {
@@ -68,6 +101,11 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
         };
     }
 
+    /**
+     * Parses the since.
+     *
+     * @return string|null
+     */
     protected function parseSince(): ?string
     {
         $since = $this->request->getParam('since');
@@ -82,6 +120,11 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
         return $since;
     }
 
+    /**
+     * Iso now.
+     *
+     * @return string
+     */
     protected function isoNow(): string
     {
         return (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');

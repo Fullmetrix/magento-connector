@@ -15,6 +15,13 @@ use Magento\Framework\Event\ObserverInterface;
 
 class InventorySaveAfter implements ObserverInterface
 {
+    /**
+     * @param ProductRepositoryInterface $productRepository
+     * @param EntitySerializer $serializer
+     * @param WebhookQueue $webhookQueue
+     * @param StoreScope $storeScope
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         private readonly ProductRepositoryInterface $productRepository,
         private readonly EntitySerializer $serializer,
@@ -24,6 +31,12 @@ class InventorySaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $event = $observer->getEvent();
@@ -37,7 +50,9 @@ class InventorySaveAfter implements ObserverInterface
             $product = '' !== $sku
                 ? $this->productRepository->get($sku, false, $this->storeSettings->getStoreId())
                 : $this->productRepository->getById(
-                    (int) (null !== $stockItem && method_exists($stockItem, 'getProductId') ? $stockItem->getProductId() : 0),
+                    (int) (null !== $stockItem && method_exists($stockItem, 'getProductId')
+                        ? $stockItem->getProductId()
+                        : 0),
                     false,
                     $this->storeSettings->getStoreId()
                 );
@@ -50,6 +65,8 @@ class InventorySaveAfter implements ObserverInterface
                 $this->serializer->serializeProduct($product),
                 'product.updated'
             );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

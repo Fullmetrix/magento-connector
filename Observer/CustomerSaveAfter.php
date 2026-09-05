@@ -13,6 +13,11 @@ use Magento\Framework\Event\ObserverInterface;
 
 class CustomerSaveAfter implements ObserverInterface
 {
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param EntitySerializer $serializer
+     * @param StoreScope $storeScope
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
@@ -20,6 +25,12 @@ class CustomerSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $customer = $observer->getEvent()->getData('customer');
@@ -31,7 +42,14 @@ class CustomerSaveAfter implements ObserverInterface
                 $this->webhookQueue->enqueueDeleted('customer', (int) $customer->getId());
                 return;
             }
-            $this->webhookQueue->enqueue('customer', (int) $customer->getId(), $this->serializer->serializeCustomer($customer), 'customer.updated');
+            $this->webhookQueue->enqueue(
+                'customer',
+                (int) $customer->getId(),
+                $this->serializer->serializeCustomer($customer),
+                'customer.updated'
+            );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

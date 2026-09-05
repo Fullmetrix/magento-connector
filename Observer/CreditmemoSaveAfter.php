@@ -13,6 +13,11 @@ use Magento\Sales\Model\Order\Creditmemo;
 
 class CreditmemoSaveAfter implements ObserverInterface
 {
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param EntitySerializer $serializer
+     * @param StoreScope $storeScope
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
@@ -20,18 +25,39 @@ class CreditmemoSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $creditmemo = $observer->getEvent()->getData('creditmemo');
-        if (!$creditmemo instanceof Creditmemo || !$creditmemo->getEntityId() || !$this->storeScope->includesCreditmemo($creditmemo)) {
+        if (!$creditmemo instanceof Creditmemo
+            || !$creditmemo->getEntityId()
+            || !$this->storeScope->includesCreditmemo($creditmemo)
+        ) {
             return;
         }
         try {
-            $this->webhookQueue->enqueue('refund', (int) $creditmemo->getEntityId(), $this->serializer->serializeRefund($creditmemo), 'refund.created');
+            $this->webhookQueue->enqueue(
+                'refund',
+                (int) $creditmemo->getEntityId(),
+                $this->serializer->serializeRefund($creditmemo),
+                'refund.created'
+            );
             $order = $creditmemo->getOrder();
             if (null !== $order && $order->getEntityId()) {
-                $this->webhookQueue->enqueue('order', (int) $order->getEntityId(), $this->serializer->serializeOrder($order), 'order.updated');
+                $this->webhookQueue->enqueue(
+                    'order',
+                    (int) $order->getEntityId(),
+                    $this->serializer->serializeOrder($order),
+                    'order.updated'
+                );
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

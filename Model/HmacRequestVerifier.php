@@ -10,12 +10,23 @@ class HmacRequestVerifier
 {
     private const TIMESTAMP_TOLERANCE_MS = 300000;
 
+    /**
+     * @param Config $config
+     * @param HmacSigner $signer
+     */
     public function __construct(
         private readonly Config $config,
         private readonly HmacSigner $signer,
     ) {
     }
 
+    /**
+     * Verifies the.
+     *
+     * @param RequestInterface $request
+     * @param string $body
+     * @return bool
+     */
     public function verify(RequestInterface $request, string $body = ''): bool
     {
         if (!$this->config->isRegistered()) {

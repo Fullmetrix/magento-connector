@@ -14,6 +14,12 @@ use Magento\SalesRule\Model\RuleFactory;
 
 class CouponSaveAfter implements ObserverInterface
 {
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param EntitySerializer $serializer
+     * @param StoreScope $storeScope
+     * @param RuleFactory $ruleFactory
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
@@ -22,6 +28,12 @@ class CouponSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $coupon = $observer->getEvent()->getData('coupon');
@@ -42,6 +54,8 @@ class CouponSaveAfter implements ObserverInterface
             }
             $payload = $this->serializer->serializeCoupon($coupon);
             $this->webhookQueue->enqueue('coupon', (string) $payload['id'], $payload, 'coupon.updated');
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

@@ -14,8 +14,17 @@ use Magento\SalesRule\Model\ResourceModel\Coupon\CollectionFactory as CouponColl
 
 class SalesRuleSaveAfter implements ObserverInterface
 {
+    /**
+     * @var array
+     */
     private array $previousCouponIds = [];
 
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param EntitySerializer $serializer
+     * @param StoreScope $storeScope
+     * @param CouponCollectionFactory $couponCollectionFactory
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
@@ -24,6 +33,12 @@ class SalesRuleSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $rule = $observer->getEvent()->getData('rule');
@@ -50,12 +65,21 @@ class SalesRuleSaveAfter implements ObserverInterface
                 return;
             }
             $this->webhookQueue->enqueue('coupon', (string) $payload['id'], $payload, 'coupon.updated');
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         } finally {
             unset($this->previousCouponIds[$key]);
         }
     }
 
+    /**
+     * Enqueue deleted coupons.
+     *
+     * @param Rule $rule
+     * @param array $previousIds
+     * @return void
+     */
     private function enqueueDeletedCoupons(Rule $rule, array $previousIds = []): void
     {
         $ids = $previousIds;
@@ -71,15 +95,25 @@ class SalesRuleSaveAfter implements ObserverInterface
         }
     }
 
+    /**
+     * Coupon ids.
+     *
+     * @param Rule $rule
+     * @return array
+     */
     private function couponIds(Rule $rule): array
     {
         $ids = [];
         try {
-            foreach ($this->couponCollectionFactory->create()->addFieldToFilter('rule_id', (int) $rule->getRuleId()) as $coupon) {
+            $coupons = $this->couponCollectionFactory->create()
+                ->addFieldToFilter('rule_id', (int) $rule->getRuleId());
+            foreach ($coupons as $coupon) {
                 $ids[] = (bool) $coupon->getIsPrimary()
                     ? (int) $rule->getRuleId()
                     : (int) $rule->getRuleId() . ':' . (int) $coupon->getCouponId();
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 

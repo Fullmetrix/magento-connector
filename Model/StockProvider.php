@@ -13,6 +13,13 @@ use Magento\InventorySalesApi\Api\StockResolverInterface;
 
 class StockProvider
 {
+    /**
+     * @param StockRegistryInterface $stockRegistry
+     * @param StockResolverInterface $stockResolver
+     * @param GetProductSalableQtyInterface $getProductSalableQty
+     * @param IsProductSalableInterface $isProductSalable
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         private readonly StockRegistryInterface $stockRegistry,
         private readonly StockResolverInterface $stockResolver,
@@ -22,6 +29,12 @@ class StockProvider
     ) {
     }
 
+    /**
+     * Returns the.
+     *
+     * @param Product $product
+     * @return array
+     */
     public function get(Product $product): array
     {
         $stockItem = null;
@@ -37,6 +50,8 @@ class StockProvider
                     'manage' => false,
                 ];
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -55,6 +70,8 @@ class StockProvider
                     'quantity' => $quantity,
                     'manage' => true,
                 ];
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }

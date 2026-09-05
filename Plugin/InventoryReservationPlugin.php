@@ -15,6 +15,13 @@ use Magento\InventorySalesApi\Api\Data\SalesChannelInterface;
 
 class InventoryReservationPlugin
 {
+    /**
+     * @param ProductRepositoryInterface $productRepository
+     * @param EntitySerializer $serializer
+     * @param WebhookQueue $webhookQueue
+     * @param StoreScope $storeScope
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         private readonly ProductRepositoryInterface $productRepository,
         private readonly EntitySerializer $serializer,
@@ -24,6 +31,15 @@ class InventoryReservationPlugin
     ) {
     }
 
+    /**
+     * After execute.
+     *
+     * @param PlaceReservationsForSalesEvent $subject
+     * @param mixed $result
+     * @param array $items
+     * @param SalesChannelInterface $salesChannel
+     * @return void
+     */
     public function afterExecute(
         PlaceReservationsForSalesEvent $subject,
         mixed $result,
@@ -59,6 +75,8 @@ class InventoryReservationPlugin
                     $this->serializer->serializeProduct($product),
                     'product.updated'
                 );
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }

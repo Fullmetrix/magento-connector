@@ -13,6 +13,12 @@ use Magento\Store\Model\StoreManagerInterface;
 
 class StoreSettingsProvider
 {
+    /**
+     * @param StoreManagerInterface $storeManager
+     * @param ScopeConfigInterface $scopeConfig
+     * @param FlagManager $flagManager
+     * @param FormatInterface $localeFormat
+     */
     public function __construct(
         private readonly StoreManagerInterface $storeManager,
         private readonly ScopeConfigInterface $scopeConfig,
@@ -21,17 +27,31 @@ class StoreSettingsProvider
     ) {
     }
 
+    /**
+     * Returns the settings.
+     *
+     * @param int|null $storeId
+     * @return array
+     */
     public function getSettings(?int $storeId = null): array
     {
         $store = null !== $storeId ? $this->getStoreById($storeId) : $this->getStore();
-        $locale = (string) ($this->scopeConfig->getValue('general/locale/code', ScopeInterface::SCOPE_STORE, $store->getId()) ?: 'en_US');
+        $locale = (string) ($this->scopeConfig->getValue(
+            'general/locale/code',
+            ScopeInterface::SCOPE_STORE,
+            $store->getId()
+        ) ?: 'en_US');
         $currency = (string) $store->getBaseCurrencyCode();
         $format = $this->localeFormat->getPriceFormat($locale, $currency);
         $pattern = trim((string) ($format['pattern'] ?? ''));
 
         return [
             'currency' => $currency,
-            'timezone' => (string) ($this->scopeConfig->getValue('general/locale/timezone', ScopeInterface::SCOPE_STORE, $store->getId()) ?: 'UTC'),
+            'timezone' => (string) ($this->scopeConfig->getValue(
+                'general/locale/timezone',
+                ScopeInterface::SCOPE_STORE,
+                $store->getId()
+            ) ?: 'UTC'),
             'locale' => $locale,
             'currencyPosition' => str_starts_with($pattern, '%s') ? 'right' : 'left',
             'thousandSeparator' => (string) ($format['groupSymbol'] ?? ','),
@@ -40,6 +60,12 @@ class StoreSettingsProvider
         ];
     }
 
+    /**
+     * Returns the site url.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
     public function getSiteUrl(?int $storeId = null): string
     {
         $store = null !== $storeId ? $this->getStoreById($storeId) : $this->getStore();
@@ -47,12 +73,19 @@ class StoreSettingsProvider
         return rtrim((string) $store->getBaseUrl(\Magento\Framework\UrlInterface::URL_TYPE_WEB), '/');
     }
 
+    /**
+     * Returns the store.
+     *
+     * @return StoreInterface
+     */
     public function getStore(): StoreInterface
     {
         $configuredId = (int) $this->flagManager->getFlagData(Config::FLAG_STORE_ID);
         if ($configuredId > 0) {
             try {
                 return $this->storeManager->getStore($configuredId);
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -60,6 +93,12 @@ class StoreSettingsProvider
         return $this->storeManager->getDefaultStoreView() ?? $this->storeManager->getStore();
     }
 
+    /**
+     * Returns the store by id.
+     *
+     * @param int $storeId
+     * @return StoreInterface
+     */
     public function getStoreById(int $storeId): StoreInterface
     {
         $store = $this->storeManager->getStore($storeId);
@@ -70,6 +109,11 @@ class StoreSettingsProvider
         return $store;
     }
 
+    /**
+     * Returns the available stores.
+     *
+     * @return array
+     */
     public function getAvailableStores(): array
     {
         $stores = [];
@@ -87,21 +131,41 @@ class StoreSettingsProvider
         return $stores;
     }
 
+    /**
+     * Returns the store id.
+     *
+     * @return int
+     */
     public function getStoreId(): int
     {
         return (int) $this->getStore()->getId();
     }
 
+    /**
+     * Returns the website id.
+     *
+     * @return int
+     */
     public function getWebsiteId(): int
     {
         return (int) $this->getStore()->getWebsiteId();
     }
 
+    /**
+     * Returns the website code.
+     *
+     * @return string
+     */
     public function getWebsiteCode(): string
     {
         return (string) $this->storeManager->getWebsite($this->getWebsiteId())->getCode();
     }
 
+    /**
+     * Returns the root category id.
+     *
+     * @return int
+     */
     public function getRootCategoryId(): int
     {
         return (int) $this->getStore()->getRootCategoryId();

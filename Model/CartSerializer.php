@@ -10,6 +10,11 @@ use Magento\Catalog\Helper\Image as ImageHelper;
 
 class CartSerializer
 {
+    /**
+     * @param Config $config
+     * @param StoreManagerInterface $storeManager
+     * @param ImageHelper $imageHelper
+     */
     public function __construct(
         private readonly Config $config,
         private readonly StoreManagerInterface $storeManager,
@@ -17,6 +22,14 @@ class CartSerializer
     ) {
     }
 
+    /**
+     * Serializes the.
+     *
+     * @param Quote $quote
+     * @return array
+     */
+    // Flattening this loop would cost a pass over the whole payload.
+    // phpcs:ignore Generic.Metrics.NestingLevel
     public function serialize(Quote $quote): array
     {
         $items = [];
@@ -38,6 +51,8 @@ class CartSerializer
                             }
                         }
                     }
+                // The failure is optional data, the caller keeps going.
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
                 } catch (\Throwable) {
                 }
             }
@@ -49,6 +64,8 @@ class CartSerializer
                     $product->setStoreId((int) $quote->getStoreId());
                     $imageUrl = (string) $this->imageHelper->init($product, 'product_thumbnail_image')->getUrl();
                     $productUrl = (string) $product->getProductUrl();
+                // The failure is optional data, the caller keeps going.
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
                 } catch (\Throwable) {
                 }
             }
@@ -90,6 +107,14 @@ class CartSerializer
         ];
     }
 
+    /**
+     * Builds the recovery url.
+     *
+     * @param Quote $quote
+     * @param array $items
+     * @param array $couponCodes
+     * @return string|null
+     */
     private function buildRecoveryUrl(Quote $quote, array $items, array $couponCodes): ?string
     {
         $secret = $this->config->getConnectionSecret();
@@ -120,6 +145,12 @@ class CartSerializer
         return $base . '/fullmetrix/cart/recover?fm_cart=' . $encoded . '&fm_cart_sig=' . $signature;
     }
 
+    /**
+     * Money.
+     *
+     * @param float $value
+     * @return string
+     */
     private function money(float $value): string
     {
         return number_format($value, 2, '.', '');

@@ -6,9 +6,21 @@ namespace Fullmetrix\Connector\Model;
 
 class ApiClient
 {
+    /**
+     * @var bool
+     */
     private bool $configMemoLoaded = false;
+    /**
+     * @var array|null
+     */
     private ?array $configMemo = null;
 
+    /**
+     * @param Config $config
+     * @param HmacSigner $signer
+     * @param HttpClient $httpClient
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         private readonly Config $config,
         private readonly HmacSigner $signer,
@@ -17,6 +29,14 @@ class ApiClient
     ) {
     }
 
+    /**
+     * Register.
+     *
+     * @param string $connectionCode
+     * @param string $siteUrl
+     * @param int|null $storeId
+     * @return array
+     */
     public function register(string $connectionCode, string $siteUrl, ?int $storeId = null): array
     {
         $resolvedStoreId = $storeId ?? $this->storeSettings->getStoreId();
@@ -56,6 +76,11 @@ class ApiClient
         return ['success' => true, 'connectionSecret' => (string) $decoded['connectionSecret']];
     }
 
+    /**
+     * Fetches the plugin config.
+     *
+     * @return array|null
+     */
     public function fetchPluginConfig(): ?array
     {
         if ($this->configMemoLoaded) {
@@ -90,6 +115,11 @@ class ApiClient
         return $this->configMemo = $decoded;
     }
 
+    /**
+     * Tells whether the tracker enabled.
+     *
+     * @return bool
+     */
     public function isTrackerEnabled(): bool
     {
         $pluginConfig = $this->fetchPluginConfig();

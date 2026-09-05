@@ -14,6 +14,12 @@ use Magento\Quote\Model\Quote;
 
 class CartAddProduct implements ObserverInterface
 {
+    /**
+     * @param TrackingQueue $trackingQueue
+     * @param CartSerializer $cartSerializer
+     * @param CheckoutSession $checkoutSession
+     * @param StoreScope $storeScope
+     */
     public function __construct(
         private readonly TrackingQueue $trackingQueue,
         private readonly CartSerializer $cartSerializer,
@@ -22,6 +28,12 @@ class CartAddProduct implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $product = $observer->getEvent()->getData('product');
@@ -45,6 +57,8 @@ class CartAddProduct implements ObserverInterface
                 return;
             }
             $this->trackingQueue->enqueue('added_to_cart', $properties);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

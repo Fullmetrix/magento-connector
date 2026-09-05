@@ -14,6 +14,13 @@ use Magento\InventoryApi\Api\SourceItemsSaveInterface;
 
 class InventorySourceItemsSavePlugin
 {
+    /**
+     * @param ProductRepositoryInterface $productRepository
+     * @param EntitySerializer $serializer
+     * @param WebhookQueue $webhookQueue
+     * @param StoreScope $storeScope
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         private readonly ProductRepositoryInterface $productRepository,
         private readonly EntitySerializer $serializer,
@@ -23,6 +30,14 @@ class InventorySourceItemsSavePlugin
     ) {
     }
 
+    /**
+     * After execute.
+     *
+     * @param SourceItemsSaveInterface $subject
+     * @param mixed $result
+     * @param array $sourceItems
+     * @return void
+     */
     public function afterExecute(SourceItemsSaveInterface $subject, mixed $result, array $sourceItems): void
     {
         $skus = [];
@@ -52,6 +67,8 @@ class InventorySourceItemsSavePlugin
                     $this->serializer->serializeProduct($product),
                     'product.updated'
                 );
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }

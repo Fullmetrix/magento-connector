@@ -11,6 +11,12 @@ use Magento\Framework\View\Element\Template\Context;
 
 class Tracker extends Template
 {
+    /**
+     * @param Context $context
+     * @param Config $config
+     * @param ApiClient $apiClient
+     * @param array $data
+     */
     public function __construct(
         Context $context,
         private readonly Config $config,
@@ -20,11 +26,21 @@ class Tracker extends Template
         parent::__construct($context, $data);
     }
 
+    /**
+     * Tells whether the render.
+     *
+     * @return bool
+     */
     public function shouldRender(): bool
     {
         return $this->config->isActive() && $this->apiClient->isTrackerEnabled();
     }
 
+    /**
+     * Returns the tracker url.
+     *
+     * @return string
+     */
     public function getTrackerUrl(): string
     {
         $cacheBucket = (int) floor(time() / 300);
@@ -32,6 +48,11 @@ class Tracker extends Template
         return $this->config->getAppOrigin() . '/t.js?ver=' . Config::VERSION . '.' . $cacheBucket;
     }
 
+    /**
+     * Returns the connection code.
+     *
+     * @return string
+     */
     public function getConnectionCode(): string
     {
         return $this->config->getConnectionCode();

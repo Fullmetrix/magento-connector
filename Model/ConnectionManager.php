@@ -8,6 +8,12 @@ class ConnectionManager
 {
     private const CODE_PATTERN = '/^FMTX-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/';
 
+    /**
+     * @param Config $config
+     * @param ApiClient $apiClient
+     * @param StoreSettingsProvider $storeSettings
+     * @param WebhookQueue $webhookQueue
+     */
     public function __construct(
         private readonly Config $config,
         private readonly ApiClient $apiClient,
@@ -16,6 +22,13 @@ class ConnectionManager
     ) {
     }
 
+    /**
+     * Connect.
+     *
+     * @param string $connectionCode
+     * @param int|null $storeId
+     * @return array
+     */
     public function connect(string $connectionCode, ?int $storeId = null): array
     {
         $connectionCode = strtoupper(trim($connectionCode));
@@ -50,6 +63,11 @@ class ConnectionManager
         return ['success' => true];
     }
 
+    /**
+     * Disconnect.
+     *
+     * @return void
+     */
     public function disconnect(): void
     {
         $this->webhookQueue->clear();

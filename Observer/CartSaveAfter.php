@@ -13,6 +13,11 @@ use Magento\Quote\Model\Quote;
 
 class CartSaveAfter implements ObserverInterface
 {
+    /**
+     * @param TrackingQueue $trackingQueue
+     * @param CartSerializer $cartSerializer
+     * @param StoreScope $storeScope
+     */
     public function __construct(
         private readonly TrackingQueue $trackingQueue,
         private readonly CartSerializer $cartSerializer,
@@ -20,6 +25,12 @@ class CartSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $cart = $observer->getEvent()->getData('cart');
@@ -32,6 +43,8 @@ class CartSaveAfter implements ObserverInterface
                 'cart' => $this->cartSerializer->serialize($quote),
                 'source' => 'server',
             ]);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

@@ -13,6 +13,10 @@ class Save extends Action
 {
     public const ADMIN_RESOURCE = 'Fullmetrix_Connector::connection';
 
+    /**
+     * @param Context $context
+     * @param ConnectionManager $connectionManager
+     */
     public function __construct(
         Context $context,
         private readonly ConnectionManager $connectionManager,
@@ -20,6 +24,11 @@ class Save extends Action
         parent::__construct($context);
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @return Redirect
+     */
     public function execute(): Redirect
     {
         $code = (string) $this->getRequest()->getParam('connection_code', '');
@@ -27,7 +36,9 @@ class Save extends Action
         $result = $this->connectionManager->connect($code, $storeId > 0 ? $storeId : null);
 
         if ($result['success']) {
-            $this->messageManager->addSuccessMessage(__('Boutique connectée à Fullmetrix. La synchronisation démarre automatiquement.'));
+            $this->messageManager->addSuccessMessage(
+                __('Store connected to Fullmetrix. The first sync starts automatically.')
+            );
         } else {
             $this->messageManager->addErrorMessage(__('Échec de la connexion : %1', $result['error'] ?? 'unknown'));
         }

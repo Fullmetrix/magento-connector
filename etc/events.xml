@@ -1,5 +1,8 @@
 <?xml version="1.0"?>
-<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+<config
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd"
+>
     <event name="sales_order_save_after">
         <observer name="fullmetrix_order_save" instance="Fullmetrix\Connector\Observer\OrderSaveAfter"/>
     </event>
@@ -58,7 +61,10 @@
         <observer name="fullmetrix_category_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
     </event>
     <event name="salesrule_rule_delete_before">
-        <observer name="fullmetrix_salesrule_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+        <observer
+            name="fullmetrix_salesrule_delete_capture"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
     </event>
     <event name="salesrule_rule_delete_commit_after">
         <observer name="fullmetrix_salesrule_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
@@ -70,9 +76,15 @@
         <observer name="fullmetrix_coupon_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
     </event>
     <event name="sales_order_creditmemo_delete_before">
-        <observer name="fullmetrix_creditmemo_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+        <observer
+            name="fullmetrix_creditmemo_delete_capture"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
     </event>
     <event name="sales_order_creditmemo_delete_commit_after">
-        <observer name="fullmetrix_creditmemo_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+        <observer
+            name="fullmetrix_creditmemo_delete_commit"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
     </event>
 </config>

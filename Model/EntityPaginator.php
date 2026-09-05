@@ -15,6 +15,16 @@ class EntityPaginator
 {
     public const ENTITIES = ['orders', 'customers', 'products', 'categories', 'coupons', 'refunds'];
 
+    /**
+     * @param OrderCollectionFactory $orderCollectionFactory
+     * @param CustomerCollectionFactory $customerCollectionFactory
+     * @param ProductCollectionFactory $productCollectionFactory
+     * @param CategoryCollectionFactory $categoryCollectionFactory
+     * @param CouponCollectionFactory $couponCollectionFactory
+     * @param CreditmemoCollectionFactory $creditmemoCollectionFactory
+     * @param StoreSettingsProvider $storeSettings
+     * @param Config $config
+     */
     public function __construct(
         private readonly OrderCollectionFactory $orderCollectionFactory,
         private readonly CustomerCollectionFactory $customerCollectionFactory,
@@ -27,18 +37,35 @@ class EntityPaginator
     ) {
     }
 
+    /**
+     * Tells whether the supported.
+     *
+     * @param string $entity
+     * @return bool
+     */
     public function isSupported(string $entity): bool
     {
         return \in_array($entity, self::ENTITIES, true);
     }
 
     /**
-     * @param callable|null $onPage recoit les identifiants de chaque page avant
-     *                              qu'elle ne soit parcourue, pour permettre un
-     *                              prechargement groupe plutot que du N+1
+     * Walks an entity by keyset pagination and yields every row.
+     *
+     * The $onPage callback receives the identifiers of each page before it is walked,
+     * so related data can be preloaded in one query instead of one query per row.
+     *
+     * @param string $entity
+     * @param int $batchSize
+     * @param string|null $since
+     * @param callable|null $onPage
+     * @return \Generator
      */
-    public function streamKeyset(string $entity, int $batchSize = 1000, ?string $since = null, ?callable $onPage = null): \Generator
-    {
+    public function streamKeyset(
+        string $entity,
+        int $batchSize = 1000,
+        ?string $since = null,
+        ?callable $onPage = null
+    ): \Generator {
         $lastId = 0;
         while (true) {
             $collection = $this->buildCollection($entity, $since);
@@ -52,6 +79,8 @@ class EntityPaginator
             if ('products' === $entity && method_exists($collection, 'addMediaGalleryData')) {
                 try {
                     $collection->addMediaGalleryData();
+                // The failure is optional data, the caller keeps going.
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
                 } catch (\Throwable) {
                 }
             }
@@ -81,6 +110,13 @@ class EntityPaginator
         }
     }
 
+    /**
+     * Counts the by entity.
+     *
+     * @param string $entity
+     * @param string|null $since
+     * @return int
+     */
     public function countByEntity(string $entity, ?string $since = null): int
     {
         $collection = $this->buildCollection($entity, $since);
@@ -88,6 +124,16 @@ class EntityPaginator
         return null === $collection ? 0 : (int) $collection->getSize();
     }
 
+    /**
+     * Recently updated.
+     *
+     * @param string $entity
+     * @param int $days
+     * @param int $hours
+     * @param int $limit
+     * @param int $offset
+     * @return array
+     */
     public function recentlyUpdated(string $entity, int $days, int $hours, int $limit, int $offset): array
     {
         $collection = $this->buildCollection($entity, null);
@@ -118,6 +164,13 @@ class EntityPaginator
         return $result;
     }
 
+    /**
+     * Builds the collection.
+     *
+     * @param string $entity
+     * @param string|null $since
+     * @return object|null
+     */
     private function buildCollection(string $entity, ?string $since): ?object
     {
         $collection = match ($entity) {
@@ -142,6 +195,8 @@ class EntityPaginator
                         ->setTimezone(new \DateTimeZone('UTC'))
                         ->format('Y-m-d H:i:s');
                     $collection->addFieldToFilter($updatedField, ['gteq' => $sinceUtc]);
+                // The failure is optional data, the caller keeps going.
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
                 } catch (\Throwable) {
                 }
             }
@@ -150,6 +205,11 @@ class EntityPaginator
         return $collection;
     }
 
+    /**
+     * Builds the product collection.
+     *
+     * @return object
+     */
     private function buildProductCollection(): object
     {
         $collection = $this->productCollectionFactory->create();
@@ -161,6 +221,11 @@ class EntityPaginator
         return $collection;
     }
 
+    /**
+     * Builds the category collection.
+     *
+     * @return object
+     */
     private function buildCategoryCollection(): object
     {
         $collection = $this->categoryCollectionFactory->create();
@@ -172,6 +237,11 @@ class EntityPaginator
         return $collection;
     }
 
+    /**
+     * Builds the coupon collection.
+     *
+     * @return object
+     */
     private function buildCouponCollection(): object
     {
         $collection = $this->couponCollectionFactory->create();
@@ -184,12 +254,22 @@ class EntityPaginator
         return $collection;
     }
 
+    /**
+     * Builds the order collection.
+     *
+     * @return object
+     */
     private function buildOrderCollection(): object
     {
         return $this->orderCollectionFactory->create()
             ->addFieldToFilter('store_id', $this->storeSettings->getStoreId());
     }
 
+    /**
+     * Builds the customer collection.
+     *
+     * @return object
+     */
     private function buildCustomerCollection(): object
     {
         return $this->customerCollectionFactory->create()
@@ -197,12 +277,23 @@ class EntityPaginator
             ->addFieldToFilter('website_id', $this->storeSettings->getWebsiteId());
     }
 
+    /**
+     * Builds the refund collection.
+     *
+     * @return object
+     */
     private function buildRefundCollection(): object
     {
         return $this->creditmemoCollectionFactory->create()
             ->addFieldToFilter('store_id', $this->storeSettings->getStoreId());
     }
 
+    /**
+     * Id field.
+     *
+     * @param string $entity
+     * @return string
+     */
     private function idField(string $entity): string
     {
         return match ($entity) {
@@ -211,6 +302,12 @@ class EntityPaginator
         };
     }
 
+    /**
+     * Updated field.
+     *
+     * @param string $entity
+     * @return string|null
+     */
     private function updatedField(string $entity): ?string
     {
         return match ($entity) {

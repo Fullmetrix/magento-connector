@@ -13,6 +13,11 @@ use Magento\Sales\Model\Order;
 
 class OrderSaveAfter implements ObserverInterface
 {
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param EntitySerializer $serializer
+     * @param StoreScope $storeScope
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly EntitySerializer $serializer,
@@ -20,6 +25,12 @@ class OrderSaveAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $order = $observer->getEvent()->getData('order');
@@ -28,7 +39,14 @@ class OrderSaveAfter implements ObserverInterface
         }
         try {
             $event = $order->isObjectNew() ? 'order.created' : 'order.updated';
-            $this->webhookQueue->enqueue('order', (int) $order->getEntityId(), $this->serializer->serializeOrder($order), $event);
+            $this->webhookQueue->enqueue(
+                'order',
+                (int) $order->getEntityId(),
+                $this->serializer->serializeOrder($order),
+                $event
+            );
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
     }

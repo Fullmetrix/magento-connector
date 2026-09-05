@@ -15,6 +15,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class ConnectCommand extends Command
 {
+    /**
+     * @param ConnectionManager $connectionManager
+     * @param Config $config
+     * @param State $state
+     */
     public function __construct(
         private readonly ConnectionManager $connectionManager,
         private readonly Config $config,
@@ -23,6 +28,11 @@ class ConnectCommand extends Command
         parent::__construct();
     }
 
+    /**
+     * Configure.
+     *
+     * @return void
+     */
     protected function configure(): void
     {
         $this->setName('fullmetrix:connect');
@@ -32,10 +42,19 @@ class ConnectCommand extends Command
         $this->addOption('store-id', null, InputOption::VALUE_OPTIONAL, 'ID de la vue boutique Magento à connecter');
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @return int
+     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
             $this->state->setAreaCode(\Magento\Framework\App\Area::AREA_ADMINHTML);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 

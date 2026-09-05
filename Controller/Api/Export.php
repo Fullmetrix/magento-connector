@@ -18,6 +18,15 @@ class Export extends AbstractApiAction implements HttpGetActionInterface
 {
     private const MAX_PER_PAGE = 500;
 
+    /**
+     * @param RequestInterface $request
+     * @param JsonFactory $jsonFactory
+     * @param HmacRequestVerifier $verifier
+     * @param EntityPaginator $paginator
+     * @param EntitySerializer $serializer
+     * @param Config $config
+     * @param StoreSettingsProvider $storeSettings
+     */
     public function __construct(
         RequestInterface $request,
         JsonFactory $jsonFactory,
@@ -30,6 +39,11 @@ class Export extends AbstractApiAction implements HttpGetActionInterface
         parent::__construct($request, $jsonFactory, $verifier, $paginator, $serializer, $config);
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @return ResultInterface
+     */
     public function execute(): ResultInterface
     {
         if (!$this->verifier->verify($this->request)) {

@@ -11,6 +11,13 @@ use Magento\SalesRule\Model\RuleFactory;
 
 class CouponCommandHandler
 {
+    /**
+     * @param RuleFactory $ruleFactory
+     * @param CouponFactory $couponFactory
+     * @param StoreSettingsProvider $storeSettings
+     * @param CustomerGroupCollectionFactory $customerGroupCollectionFactory
+     * @param Magento\Catalog\Model\ProductFactory $productFactory
+     */
     public function __construct(
         private readonly RuleFactory $ruleFactory,
         private readonly CouponFactory $couponFactory,
@@ -20,6 +27,13 @@ class CouponCommandHandler
     ) {
     }
 
+    /**
+     * Handles the.
+     *
+     * @param string $action
+     * @param array $payload
+     * @return array
+     */
     public function handle(string $action, array $payload): array
     {
         return match ($action) {
@@ -30,6 +44,12 @@ class CouponCommandHandler
         };
     }
 
+    /**
+     * Creates the coupon.
+     *
+     * @param array $payload
+     * @return array
+     */
     private function createCoupon(array $payload): array
     {
         $code = strtoupper(trim((string) ($payload['code'] ?? '')));
@@ -52,6 +72,12 @@ class CouponCommandHandler
         return ['success' => true, 'data' => ['id' => (int) $rule->getRuleId(), 'code' => $code]];
     }
 
+    /**
+     * Updates the coupon.
+     *
+     * @param array $payload
+     * @return array
+     */
     private function updateCoupon(array $payload): array
     {
         if (null !== $this->generatedCouponReference($payload)) {
@@ -80,9 +106,18 @@ class CouponCommandHandler
             return ['success' => false, 'error' => 'save_failed: ' . $e->getMessage()];
         }
 
-        return ['success' => true, 'data' => ['id' => (int) $rule->getRuleId(), 'code' => (string) $rule->getCouponCode()]];
+        return ['success' => true, 'data' => [
+            'id' => (int) $rule->getRuleId(),
+            'code' => (string) $rule->getCouponCode(),
+        ]];
     }
 
+    /**
+     * Deletes the coupon.
+     *
+     * @param array $payload
+     * @return array
+     */
     private function deleteCoupon(array $payload): array
     {
         $generatedCouponReference = $this->generatedCouponReference($payload);
@@ -128,6 +163,14 @@ class CouponCommandHandler
         return ['success' => true, 'data' => ['deleted' => true]];
     }
 
+    /**
+     * Applies the payload.
+     *
+     * @param Rule $rule
+     * @param string $code
+     * @param array $payload
+     * @return void
+     */
     private function applyPayload(Rule $rule, string $code, array $payload): void
     {
         $isNew = !$rule->getRuleId();
@@ -218,6 +261,12 @@ class CouponCommandHandler
         }
     }
 
+    /**
+     * Skus for product ids.
+     *
+     * @param array $productIds
+     * @return array
+     */
     private function skusForProductIds(array $productIds): array
     {
         $ids = array_values(array_filter(array_map('intval', $productIds)));
@@ -228,11 +277,16 @@ class CouponCommandHandler
         foreach ($ids as $id) {
             try {
                 $product = $this->productFactory->create();
+                // Direct resource load on purpose: the repository would run every product
+                // plugin for a single SKU lookup on the export hot path.
+                // phpcs:ignore Magento2.Methods.DeprecatedModelMethod
                 $product->getResource()->load($product, $id);
                 $sku = (string) $product->getSku();
                 if ('' !== $sku) {
                     $skus[] = $sku;
                 }
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -240,6 +294,12 @@ class CouponCommandHandler
         return $skus;
     }
 
+    /**
+     * Finds the rule by code.
+     *
+     * @param string $code
+     * @return Rule|null
+     */
     private function findRuleByCode(string $code): ?Rule
     {
         $coupon = $this->couponFactory->create()->loadByCode($code);
@@ -251,6 +311,12 @@ class CouponCommandHandler
         return $rule->getRuleId() && $this->ruleInScope($rule) ? $rule : null;
     }
 
+    /**
+     * To date.
+     *
+     * @param string $value
+     * @return string
+     */
     private function toDate(string $value): string
     {
         try {
@@ -260,6 +326,12 @@ class CouponCommandHandler
         }
     }
 
+    /**
+     * Generated coupon reference.
+     *
+     * @param array $payload
+     * @return array|null
+     */
     private function generatedCouponReference(array $payload): ?array
     {
         $id = (string) ($payload['id'] ?? '');
@@ -270,6 +342,12 @@ class CouponCommandHandler
         return [(int) $matches[1], (int) $matches[2]];
     }
 
+    /**
+     * Rule in scope.
+     *
+     * @param Rule $rule
+     * @return bool
+     */
     private function ruleInScope(Rule $rule): bool
     {
         return \in_array(

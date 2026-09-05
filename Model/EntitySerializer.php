@@ -116,16 +116,50 @@ class EntitySerializer
         'products' => 'product_id',
     ];
 
+    /**
+     * @var array
+     */
     private array $relatedTablesCache = [];
+    /**
+     * @var array
+     */
     private array $relatedMetaCache = [];
+    /**
+     * @var array
+     */
     private array $relatedFetchedIds = [];
 
+    /**
+     * @var array|null
+     */
     private ?array $categoryNameCache = null;
+    /**
+     * @var array|null
+     */
     private ?array $customerGroupCache = null;
+    /**
+     * @var array|null
+     */
     private ?array $productSalesCache = null;
+    /**
+     * @var array
+     */
     private array $ruleCache = [];
+    /**
+     * @var array
+     */
     private array $ruleCouponDetailsCache = [];
 
+    /**
+     * @param StockProvider $stockProvider
+     * @param Configurable $configurableType
+     * @param SubscriberFactory $subscriberFactory
+     * @param Magento\Catalog\Model\ResourceModel\Category\CollectionFactory $categoryCollectionFactory
+     * @param Magento\Catalog\Model\ProductFactory $productFactory
+     * @param Magento\Framework\App\ResourceConnection $resourceConnection
+     * @param StoreSettingsProvider $storeSettings
+     * @param RuleFactory $ruleFactory
+     */
     public function __construct(
         private readonly StockProvider $stockProvider,
         private readonly Configurable $configurableType,
@@ -138,6 +172,12 @@ class EntitySerializer
     ) {
     }
 
+    /**
+     * Serializes the order.
+     *
+     * @param Order $order
+     * @return array
+     */
     public function serializeOrder(Order $order): array
     {
         $billing = $order->getBillingAddress();
@@ -178,7 +218,8 @@ class EntitySerializer
             $tracks = 0 === \count($tracks) ? [null] : $tracks;
             foreach ($tracks as $index => $track) {
                 $shippingLines[] = [
-                    'id' => ($shippingMethod ?: 'shipping') . (null !== $track ? ':' . (string) $track->getEntityId() : ''),
+                    'id' => ($shippingMethod ?: 'shipping')
+                        . (null !== $track ? ':' . (string) $track->getEntityId() : ''),
                     'method_title' => (string) $order->getShippingDescription(),
                     'method_id' => $shippingMethod,
                     'total' => $this->money(0 === $index ? (float) $order->getShippingAmount() : 0),
@@ -261,8 +302,12 @@ class EntitySerializer
             'meta_data' => array_merge(
                 $this->relatedMetaFor('orders', (int) $order->getEntityId()),
                 $this->extraAttributesMeta($order->getData(), self::ORDER_MAPPED_KEYS),
-                null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
-                null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
+                null !== $billing
+                    ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_')
+                    : [],
+                null !== $shipping
+                    ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_')
+                    : []
             ),
         ];
         $billingPayload = $this->address($billing, (string) $order->getCustomerEmail());
@@ -277,6 +322,12 @@ class EntitySerializer
         return $payload;
     }
 
+    /**
+     * Serializes the customer.
+     *
+     * @param Customer $customer
+     * @return array
+     */
     public function serializeCustomer(Customer $customer): array
     {
         $billing = $customer->getDefaultBillingAddress() ?: null;
@@ -289,6 +340,8 @@ class EntitySerializer
                 (int) $customer->getWebsiteId()
             );
             $newsletter = $subscriber->isSubscribed();
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
         $payload = [
@@ -314,8 +367,12 @@ class EntitySerializer
             'meta_data' => array_merge(
                 $this->relatedMetaFor('customers', (int) $customer->getId()),
                 $this->extraAttributesMeta($customer->getData(), self::CUSTOMER_MAPPED_KEYS),
-                null !== $billing ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_') : [],
-                null !== $shipping ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_') : []
+                null !== $billing
+                    ? $this->extraAttributesMeta($billing->getData(), self::ADDRESS_MAPPED_KEYS, 'billing_')
+                    : [],
+                null !== $shipping
+                    ? $this->extraAttributesMeta($shipping->getData(), self::ADDRESS_MAPPED_KEYS, 'shipping_')
+                    : []
             ),
         ];
         $billingPayload = $this->customerAddress($billing);
@@ -330,6 +387,12 @@ class EntitySerializer
         return $payload;
     }
 
+    /**
+     * Serializes the product.
+     *
+     * @param Product $product
+     * @return array
+     */
     public function serializeProduct(Product $product): array
     {
         $product->setStoreId($this->storeSettings->getStoreId());
@@ -372,6 +435,8 @@ class EntitySerializer
                     'position' => (int) ($entry->getPosition() ?: $index),
                 ];
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -390,6 +455,8 @@ class EntitySerializer
                         'alt' => (string) $product->getName(),
                         'position' => 0,
                     ];
+                // The failure is optional data, the caller keeps going.
+                // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
                 } catch (\Throwable) {
                 }
             }
@@ -406,6 +473,8 @@ class EntitySerializer
         if ($isVariation) {
             try {
                 $attributes = $this->configurableAttributesForChild($product, $parentId);
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -416,6 +485,8 @@ class EntitySerializer
             if (\is_string($brandText)) {
                 $brand = $brandText;
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -430,6 +501,8 @@ class EntitySerializer
         $permalink = '';
         try {
             $permalink = (string) $product->getProductUrl();
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -491,6 +564,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Serializes the category.
+     *
+     * @param Category $category
+     * @return array
+     */
     public function serializeCategory(Category $category): array
     {
         $parentId = (int) $category->getParentId();
@@ -503,6 +582,8 @@ class EntitySerializer
                     \Magento\Framework\UrlInterface::URL_TYPE_MEDIA
                 ), '/');
                 $imageUrl = $mediaBase . '/catalog/category/' . ltrim($image, '/');
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -525,6 +606,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Serializes the coupon.
+     *
+     * @param Rule|Coupon $source
+     * @return array
+     */
     public function serializeCoupon(Rule|Coupon $source): array
     {
         $coupon = $source instanceof Coupon ? $source : $source->getPrimaryCoupon();
@@ -544,8 +631,12 @@ class EntitySerializer
             'discount_type' => $details['discount_type'],
             'amount' => $this->money((float) $rule->getDiscountAmount()),
             'usage_count' => $coupon ? (int) $coupon->getTimesUsed() : 0,
-            'usage_limit' => $coupon && $coupon->getUsageLimit() ? (int) $coupon->getUsageLimit() : ($rule->getUsesPerCoupon() ? (int) $rule->getUsesPerCoupon() : null),
-            'usage_limit_per_user' => $coupon && $coupon->getUsagePerCustomer() ? (int) $coupon->getUsagePerCustomer() : ($rule->getUsesPerCustomer() ? (int) $rule->getUsesPerCustomer() : null),
+            'usage_limit' => $coupon && $coupon->getUsageLimit()
+                ? (int) $coupon->getUsageLimit()
+                : ($rule->getUsesPerCoupon() ? (int) $rule->getUsesPerCoupon() : null),
+            'usage_limit_per_user' => $coupon && $coupon->getUsagePerCustomer()
+                ? (int) $coupon->getUsagePerCustomer()
+                : ($rule->getUsesPerCustomer() ? (int) $rule->getUsesPerCustomer() : null),
             'individual_use' => (bool) $rule->getDiscardSubsequentRules(),
             'exclude_sale_items' => false,
             'free_shipping' => \in_array((string) $rule->getSimpleFreeShipping(), ['1', '2'], true),
@@ -562,6 +653,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Serializes the refund.
+     *
+     * @param Creditmemo $creditmemo
+     * @return array
+     */
     public function serializeRefund(Creditmemo $creditmemo): array
     {
         $order = $creditmemo->getOrder();
@@ -607,6 +704,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Line items.
+     *
+     * @param Order $order
+     * @return array
+     */
     private function lineItems(Order $order): array
     {
         $items = [];
@@ -663,6 +766,12 @@ class EntitySerializer
         return $items;
     }
 
+    /**
+     * Order tax lines.
+     *
+     * @param int $orderId
+     * @return array
+     */
     private function orderTaxLines(int $orderId): array
     {
         if ($orderId <= 0) {
@@ -711,8 +820,17 @@ class EntitySerializer
         }
     }
 
-    private function address(?\Magento\Sales\Api\Data\OrderAddressInterface $address, string $fallbackEmail = ''): ?array
-    {
+    /**
+     * Address.
+     *
+     * @param \Magento\Sales\Api\Data\OrderAddressInterface|null $address
+     * @param string $fallbackEmail
+     * @return array|null
+     */
+    private function address(
+        ?\Magento\Sales\Api\Data\OrderAddressInterface $address,
+        string $fallbackEmail = ''
+    ): ?array {
         if (null === $address) {
             return null;
         }
@@ -734,6 +852,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Customer address.
+     *
+     * @param \Magento\Customer\Model\Address|null $address
+     * @return array|null
+     */
     private function customerAddress(?\Magento\Customer\Model\Address $address): ?array
     {
         if (null === $address) {
@@ -756,11 +880,19 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Configurable attributes for child.
+     *
+     * @param Product $child
+     * @param int $parentId
+     * @return array
+     */
     private function configurableAttributesForChild(Product $child, int $parentId): array
     {
         $attributes = [];
         $childData = $child->getData();
-        foreach ($this->configurableType->getConfigurableAttributesAsArray($this->loadParentStub($parentId)) as $attribute) {
+        $parentStub = $this->loadParentStub($parentId);
+        foreach ($this->configurableType->getConfigurableAttributesAsArray($parentStub) as $attribute) {
             $code = (string) ($attribute['attribute_code'] ?? '');
             if ('' === $code || !\array_key_exists($code, $childData)) {
                 continue;
@@ -781,8 +913,17 @@ class EntitySerializer
         return $attributes;
     }
 
+    /**
+     * @var array|null
+     */
     private ?array $parentStubCache = null;
 
+    /**
+     * Loads the parent stub.
+     *
+     * @param int $parentId
+     * @return Product
+     */
     private function loadParentStub(int $parentId): Product
     {
         if (null !== $this->parentStubCache && $this->parentStubCache['id'] === $parentId) {
@@ -790,14 +931,26 @@ class EntitySerializer
         }
         $product = $this->productFactory->create();
         $product->setStoreId($this->storeSettings->getStoreId());
+        // Direct resource load on purpose: the repository would run every product
+        // plugin for a single parent lookup on the export hot path.
+        // phpcs:ignore Magento2.Methods.DeprecatedModelMethod
         $product->getResource()->load($product, $parentId);
         $this->parentStubCache = ['id' => $parentId, 'product' => $product];
 
         return $product;
     }
 
+    /**
+     * @var array|null
+     */
     private ?array $parentByChildCache = null;
 
+    /**
+     * Parent id for child.
+     *
+     * @param int $productId
+     * @return int|null
+     */
     private function parentIdForChild(int $productId): ?int
     {
         $this->parentByChildCache ??= [];
@@ -813,6 +966,8 @@ class EntitySerializer
                 if (false !== $parentId) {
                     $this->parentByChildCache[$productId] = (int) $parentId;
                 }
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -820,6 +975,12 @@ class EntitySerializer
         return $this->parentByChildCache[$productId] ?? null;
     }
 
+    /**
+     * Category name.
+     *
+     * @param int $categoryId
+     * @return string|null
+     */
     private function categoryName(int $categoryId): ?string
     {
         if (null === $this->categoryNameCache) {
@@ -828,10 +989,13 @@ class EntitySerializer
                 $collection = $this->categoryCollectionFactory->create();
                 $collection->setStoreId($this->storeSettings->getStoreId());
                 $collection->addAttributeToSelect('name');
-                $collection->addFieldToFilter('path', ['like' => '1/' . $this->storeSettings->getRootCategoryId() . '/%']);
+                $rootPath = '1/' . $this->storeSettings->getRootCategoryId() . '/%';
+                $collection->addFieldToFilter('path', ['like' => $rootPath]);
                 foreach ($collection as $category) {
                     $this->categoryNameCache[(int) $category->getId()] = (string) $category->getName();
                 }
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -839,6 +1003,12 @@ class EntitySerializer
         return $this->categoryNameCache[$categoryId] ?? null;
     }
 
+    /**
+     * Customer group.
+     *
+     * @param int $groupId
+     * @return string
+     */
     private function customerGroup(int $groupId): string
     {
         if (null === $this->customerGroupCache) {
@@ -852,6 +1022,8 @@ class EntitySerializer
                 foreach ($connection->fetchAll($select) as $row) {
                     $this->customerGroupCache[(int) $row['customer_group_id']] = (string) $row['customer_group_code'];
                 }
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -859,6 +1031,12 @@ class EntitySerializer
         return $this->customerGroupCache[$groupId] ?? '';
     }
 
+    /**
+     * Product sales.
+     *
+     * @param int $productId
+     * @return float
+     */
     private function productSales(int $productId): float
     {
         if (null === $this->productSalesCache) {
@@ -869,7 +1047,9 @@ class EntitySerializer
                     ['item' => $this->resourceConnection->getTableName('sales_order_item')],
                     [
                         'product_id',
-                        'total_sales' => new \Zend_Db_Expr('SUM(GREATEST(item.qty_ordered - item.qty_canceled - item.qty_refunded, 0))'),
+                        'total_sales' => new \Zend_Db_Expr(
+                            'SUM(GREATEST(item.qty_ordered - item.qty_canceled - item.qty_refunded, 0))'
+                        ),
                     ]
                 )->joinInner(
                     ['orders' => $this->resourceConnection->getTableName('sales_order')],
@@ -881,6 +1061,8 @@ class EntitySerializer
                 foreach ($connection->fetchAll($select) as $row) {
                     $this->productSalesCache[(int) $row['product_id']] = (float) $row['total_sales'];
                 }
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -888,6 +1070,12 @@ class EntitySerializer
         return $this->productSalesCache[$productId] ?? 0.0;
     }
 
+    /**
+     * Product features.
+     *
+     * @param Product $product
+     * @return array
+     */
     private function productFeatures(Product $product): array
     {
         $features = [];
@@ -917,6 +1105,14 @@ class EntitySerializer
         return $features;
     }
 
+    /**
+     * Coupon product restrictions.
+     *
+     * @param Rule $rule
+     * @return array
+     */
+    // Flattening this loop would cost a pass over the whole payload.
+    // phpcs:ignore Generic.Metrics.NestingLevel
     private function couponProductRestrictions(Rule $rule): array
     {
         $includedSkus = [];
@@ -927,7 +1123,8 @@ class EntitySerializer
             foreach ($this->flattenConditions($rule->getActions()->asArray()) as $condition) {
                 $attribute = (string) ($condition['attribute'] ?? '');
                 $operator = (string) ($condition['operator'] ?? '');
-                $values = array_values(array_filter(array_map('trim', explode(',', (string) ($condition['value'] ?? '')))));
+                $raw = explode(',', (string) ($condition['value'] ?? ''));
+                $values = array_values(array_filter(array_map('trim', $raw)));
                 if ('sku' === $attribute) {
                     foreach ($values as $value) {
                         if ('!()' === $operator) {
@@ -950,6 +1147,8 @@ class EntitySerializer
                     }
                 }
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -961,6 +1160,12 @@ class EntitySerializer
         ];
     }
 
+    /**
+     * Rule coupon details.
+     *
+     * @param Rule $rule
+     * @return array
+     */
     private function ruleCouponDetails(Rule $rule): array
     {
         $ruleId = (int) $rule->getRuleId();
@@ -983,6 +1188,8 @@ class EntitySerializer
                     $maximumAmount = (string) $condition['value'];
                 }
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
@@ -1002,6 +1209,12 @@ class EntitySerializer
         return $details;
     }
 
+    /**
+     * Rule for coupon.
+     *
+     * @param Coupon $coupon
+     * @return Rule
+     */
     private function ruleForCoupon(Coupon $coupon): Rule
     {
         $ruleId = (int) $coupon->getRuleId();
@@ -1012,6 +1225,12 @@ class EntitySerializer
         return $this->ruleCache[$ruleId];
     }
 
+    /**
+     * Product ids for skus.
+     *
+     * @param array $skus
+     * @return array
+     */
     private function productIdsForSkus(array $skus): array
     {
         if (0 === \count($skus)) {
@@ -1030,20 +1249,34 @@ class EntitySerializer
         }
     }
 
+    /**
+     * Flattens the conditions.
+     *
+     * @param array $condition
+     * @return array
+     */
     private function flattenConditions(array $condition): array
     {
         $result = [];
+        $nested = [];
         foreach ($condition['conditions'] ?? [] as $child) {
             if (!\is_array($child)) {
                 continue;
             }
             $result[] = $child;
-            $result = array_merge($result, $this->flattenConditions($child));
+            $nested[] = $this->flattenConditions($child);
         }
 
-        return $result;
+        return $nested ? array_merge($result, ...$nested) : $result;
     }
 
+    /**
+     * First attribute value.
+     *
+     * @param Product $product
+     * @param array $codes
+     * @return string|null
+     */
     private function firstAttributeValue(Product $product, array $codes): ?string
     {
         foreach ($codes as $code) {
@@ -1066,16 +1299,34 @@ class EntitySerializer
         return null;
     }
 
+    /**
+     * Nullable money.
+     *
+     * @param mixed $value
+     * @return string|null
+     */
     private function nullableMoney(mixed $value): ?string
     {
         return null === $value || '' === trim((string) $value) ? null : $this->money($value);
     }
 
+    /**
+     * Money.
+     *
+     * @param float|int|string|null $value
+     * @return string
+     */
     private function money(float|int|string|null $value): string
     {
         return number_format((float) ($value ?? 0), 2, '.', '');
     }
 
+    /**
+     * Iso.
+     *
+     * @param string|null $value
+     * @return string|null
+     */
     private function iso(?string $value): ?string
     {
         if (null === $value || '' === trim($value)) {
@@ -1095,10 +1346,10 @@ class EntitySerializer
      * meta_data, so custom EAV attributes reach the platform without having to
      * be whitelisted here first.
      *
-     * @param array<string, mixed> $data
-     * @param list<string> $mappedKeys
-     *
-     * @return list<array{key: string, value: string}>
+     * @param array $data
+     * @param array $mappedKeys
+     * @param string $prefix
+     * @return array
      */
     private function extraAttributesMeta(array $data, array $mappedKeys, string $prefix = ''): array
     {
@@ -1164,7 +1415,9 @@ class EntitySerializer
      * portant la cle etrangere de l'entite. Sans ce prechargement le
      * serialiseur, qui travaille ligne par ligne, ferait du N+1.
      *
-     * @param list<int> $ids
+     * @param string $entity
+     * @param array $ids
+     * @return void
      */
     public function prefetchRelated(string $entity, array $ids): void
     {
@@ -1182,6 +1435,7 @@ class EntitySerializer
         }
         $this->relatedFetchedIds[$fkColumn] = ($this->relatedFetchedIds[$fkColumn] ?? []) + array_fill_keys($ids, true);
         $idList = implode(',', $ids);
+        $pending = [];
 
         foreach ($this->detectRelatedTables($fkColumn) as $table => $meta) {
             $pkColumn = $meta['pk'];
@@ -1211,16 +1465,31 @@ class EntitySerializer
                 if (0 === $id) {
                     continue;
                 }
-                $this->relatedMetaCache[$fkColumn][$id] = array_merge(
-                    $this->relatedMetaCache[$fkColumn][$id] ?? [],
-                    $this->extraAttributesMeta($row, ['entity_id', 'id', $fkColumn], $short . '_')
+                $pending[$id][] = $this->extraAttributesMeta(
+                    $row,
+                    ['entity_id', 'id', $fkColumn],
+                    $short . '_'
                 );
             }
+        }
+
+        foreach ($pending as $id => $chunks) {
+            // One merge per entity, not per row: the rows were already grouped above.
+            // phpcs:ignore Magento2.Performance.ForeachArrayMerge
+            $this->relatedMetaCache[$fkColumn][$id] = array_merge(
+                $this->relatedMetaCache[$fkColumn][$id] ?? [],
+                ...$chunks
+            );
         }
     }
 
     /**
-     * @return array<string, string> nom de table => colonne de cle primaire
+     * Lists the third party tables carrying the given foreign key.
+     *
+     * The returned map is table name => primary key column.
+     *
+     * @param string $fkColumn
+     * @return array
      */
     private function detectRelatedTables(string $fkColumn): array
     {
@@ -1234,7 +1503,8 @@ class EntitySerializer
             $rows = $connection->fetchAll(
                 'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column,
                         GROUP_CONCAT(DISTINCT
-                            CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\', \'tinyblob\', \'binary\', \'varbinary\')
+                            CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\',
+                                \'tinyblob\', \'binary\', \'varbinary\')
                                  THEN NULL ELSE c.COLUMN_NAME END
                         ) AS safe_columns
                  FROM information_schema.COLUMNS c
@@ -1277,6 +1547,12 @@ class EntitySerializer
         return $tables;
     }
 
+    /**
+     * Tells whether the core table.
+     *
+     * @param string $table
+     * @return bool
+     */
     private function isCoreTable(string $table): bool
     {
         // Une installation peut avoir un prefixe de tables: sans le retirer,
@@ -1297,7 +1573,11 @@ class EntitySerializer
     }
 
     /**
-     * @return list<array{key: string, value: string}>
+     * Returns the third party table meta collected for one entity.
+     *
+     * @param string $entity
+     * @param int $id
+     * @return array
      */
     private function relatedMetaFor(string $entity, int $id): array
     {
@@ -1317,10 +1597,11 @@ class EntitySerializer
     }
 
     /**
-     * @param list<array{key: string, value: string}> $metaData
-     * @param list<array{key: string, value: string}> $extras
+     * Merges extra meta pairs into an existing set, first key wins.
      *
-     * @return list<array{key: string, value: string}>
+     * @param array $metaData
+     * @param array $extras
+     * @return array
      */
     private function mergeMeta(array $metaData, array $extras): array
     {
@@ -1338,6 +1619,14 @@ class EntitySerializer
         return $metaData;
     }
 
+    /**
+     * Tells whether the sensitive key.
+     *
+     * @param string $key
+     * @return bool
+     */
+    // Pure helper, nothing to intercept.
+    // phpcs:ignore Magento2.Functions.StaticFunction
     private static function isSensitiveKey(string $key): bool
     {
         $lower = strtolower($key);
@@ -1350,6 +1639,15 @@ class EntitySerializer
         return false;
     }
 
+    /**
+     * Truncates the utf8.
+     *
+     * @param string $text
+     * @param int $maxBytes
+     * @return string
+     */
+    // Pure helper, nothing to intercept.
+    // phpcs:ignore Magento2.Functions.StaticFunction
     private static function truncateUtf8(string $text, int $maxBytes): string
     {
         if ($maxBytes <= 0) {

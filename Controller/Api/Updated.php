@@ -9,6 +9,11 @@ use Magento\Framework\Controller\ResultInterface;
 
 class Updated extends AbstractApiAction implements HttpGetActionInterface
 {
+    /**
+     * Runs the controller action.
+     *
+     * @return ResultInterface
+     */
     public function execute(): ResultInterface
     {
         if (!$this->verifier->verify($this->request)) {

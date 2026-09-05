@@ -20,8 +20,17 @@ use Magento\SalesRule\Model\ResourceModel\Coupon\CollectionFactory as CouponColl
 
 class EntityDeleteAfter implements ObserverInterface
 {
+    /**
+     * @var array
+     */
     private array $pendingDeletes = [];
 
+    /**
+     * @param WebhookQueue $webhookQueue
+     * @param StoreScope $storeScope
+     * @param RuleFactory $ruleFactory
+     * @param CouponCollectionFactory $couponCollectionFactory
+     */
     public function __construct(
         private readonly WebhookQueue $webhookQueue,
         private readonly StoreScope $storeScope,
@@ -30,6 +39,12 @@ class EntityDeleteAfter implements ObserverInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @param Observer $observer
+     * @return void
+     */
     public function execute(Observer $observer): void
     {
         $event = $observer->getEvent();
@@ -54,10 +69,17 @@ class EntityDeleteAfter implements ObserverInterface
         $entity = match ($eventName) {
             'sales_order_delete_before', 'sales_order_delete_commit_after' => ['order', $event->getData('order')],
             'customer_delete_before', 'customer_delete_commit_after' => ['customer', $event->getData('customer')],
-            'catalog_product_delete_before', 'catalog_product_delete_commit_after' => ['product', $event->getData('product')],
-            'catalog_category_delete_before', 'catalog_category_delete_commit_after' => ['category', $event->getData('category')],
-            'salesrule_coupon_delete_before', 'salesrule_coupon_delete_commit_after' => ['coupon', $event->getData('coupon')],
-            'sales_order_creditmemo_delete_before', 'sales_order_creditmemo_delete_commit_after' => ['refund', $event->getData('creditmemo')],
+            'catalog_product_delete_before',
+            'catalog_product_delete_commit_after' => ['product', $event->getData('product')],
+            'catalog_category_delete_before',
+            'catalog_category_delete_commit_after' => ['category', $event->getData('category')],
+            'salesrule_coupon_delete_before',
+            'salesrule_coupon_delete_commit_after' => ['coupon', $event->getData('coupon')],
+            'sales_order_creditmemo_delete_before',
+            'sales_order_creditmemo_delete_commit_after' => [
+                'refund',
+                $event->getData('creditmemo'),
+            ],
             default => null,
         };
         if (null === $entity) {
@@ -81,12 +103,20 @@ class EntityDeleteAfter implements ObserverInterface
 
         try {
             $this->webhookQueue->enqueueDeleted($entity[0], $id);
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         } finally {
             unset($this->pendingDeletes[$key]);
         }
     }
 
+    /**
+     * Tells whether the in scope.
+     *
+     * @param mixed $entity
+     * @return bool
+     */
     private function isInScope(mixed $entity): bool
     {
         return match (true) {
@@ -101,6 +131,12 @@ class EntityDeleteAfter implements ObserverInterface
         };
     }
 
+    /**
+     * Entity id.
+     *
+     * @param mixed $entity
+     * @return int|string
+     */
     private function entityId(mixed $entity): int|string
     {
         if ($entity instanceof Coupon) {
@@ -114,6 +150,12 @@ class EntityDeleteAfter implements ObserverInterface
             : 0;
     }
 
+    /**
+     * Coupon is in scope.
+     *
+     * @param Coupon $coupon
+     * @return bool
+     */
     private function couponIsInScope(Coupon $coupon): bool
     {
         try {
@@ -125,6 +167,12 @@ class EntityDeleteAfter implements ObserverInterface
         }
     }
 
+    /**
+     * Rule coupon ids.
+     *
+     * @param Rule $rule
+     * @return array
+     */
     private function ruleCouponIds(Rule $rule): array
     {
         $ids = [];
@@ -136,6 +184,8 @@ class EntityDeleteAfter implements ObserverInterface
                     ? (int) $rule->getRuleId()
                     : (int) $rule->getRuleId() . ':' . (int) $coupon->getCouponId();
             }
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
         if (0 === \count($ids)) {
@@ -145,6 +195,13 @@ class EntityDeleteAfter implements ObserverInterface
         return $ids;
     }
 
+    /**
+     * Pending key.
+     *
+     * @param string $entityType
+     * @param mixed $entity
+     * @return string
+     */
     private function pendingKey(string $entityType, mixed $entity): string
     {
         return \is_object($entity)

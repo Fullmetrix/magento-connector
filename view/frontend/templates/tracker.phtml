@@ -4,4 +4,8 @@ if (!$block->shouldRender()) {
     return;
 }
 ?>
-<script async src="<?= $escaper->escapeUrl($block->getTrackerUrl()) ?>" data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"></script>
+<script
+    async
+    src="<?= $escaper->escapeUrl($block->getTrackerUrl()) ?>"
+    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"
+></script>

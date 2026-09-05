@@ -20,6 +20,16 @@ use Magento\Framework\Controller\ResultInterface;
 
 class Recover implements ActionInterface, HttpGetActionInterface
 {
+    /**
+     * @param RequestInterface $request
+     * @param RedirectFactory $redirectFactory
+     * @param Config $config
+     * @param CheckoutCart $cart
+     * @param ProductRepositoryInterface $productRepository
+     * @param StoreScope $storeScope
+     * @param StoreSettingsProvider $storeSettings
+     * @param Configurable $configurableType
+     */
     public function __construct(
         private readonly RequestInterface $request,
         private readonly RedirectFactory $redirectFactory,
@@ -32,6 +42,11 @@ class Recover implements ActionInterface, HttpGetActionInterface
     ) {
     }
 
+    /**
+     * Runs the controller action.
+     *
+     * @return ResultInterface
+     */
     public function execute(): ResultInterface
     {
         $redirect = $this->redirectFactory->create();
@@ -52,6 +67,8 @@ class Recover implements ActionInterface, HttpGetActionInterface
         }
 
         $decoded = json_decode(
+            // The connector needs the raw call here, the Magento wrapper does not cover it.
+            // phpcs:ignore Magento2.Functions.DiscouragedFunction
             base64_decode(strtr($payload, '-_', '+/')) ?: '',
             true
         );
@@ -94,6 +111,8 @@ class Recover implements ActionInterface, HttpGetActionInterface
                     $params['super_attribute'] = $attributes;
                 }
                 $this->cart->addProduct($product, $params);
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
@@ -102,18 +121,29 @@ class Recover implements ActionInterface, HttpGetActionInterface
         if (\count($coupons) > 0 && \is_string($coupons[0]) && '' !== $coupons[0]) {
             try {
                 $this->cart->getQuote()->setCouponCode($coupons[0]);
+            // The failure is optional data, the caller keeps going.
+            // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
             }
         }
 
         try {
             $this->cart->save();
+        // The failure is optional data, the caller keeps going.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {
         }
 
         return $redirect;
     }
 
+    /**
+     * Attributes for legacy variation.
+     *
+     * @param Product $parent
+     * @param int $variationId
+     * @return array
+     */
     private function attributesForLegacyVariation(Product $parent, int $variationId): array
     {
         try {
