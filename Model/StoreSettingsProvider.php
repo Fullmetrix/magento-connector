@@ -124,7 +124,7 @@ class StoreSettingsProvider
             $website = $this->storeManager->getWebsite((int) $store->getWebsiteId());
             $stores[] = [
                 'id' => (int) $store->getId(),
-                'label' => (string) $website->getName() . ' — ' . (string) $store->getName(),
+                'label' => (string) $website->getName() . ' / ' . (string) $store->getName(),
             ];
         }
 
