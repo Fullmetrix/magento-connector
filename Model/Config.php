@@ -9,7 +9,7 @@ use Magento\Framework\FlagManager;
 
 class Config
 {
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.3.0';
 
     public const FLAG_CONNECTION_CODE = 'fullmetrix_connection_code';
     public const FLAG_CONNECTION_SECRET = 'fullmetrix_connection_secret';

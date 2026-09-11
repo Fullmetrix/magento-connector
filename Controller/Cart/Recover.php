@@ -20,6 +20,10 @@ use Magento\Framework\Controller\ResultInterface;
 
 class Recover implements ActionInterface, HttpGetActionInterface
 {
+    private const CART_PARAM = 'fm_cart_id';
+    private const MAX_ITEMS = 25;
+    private const LINK_PARAMS = ['fm_cart_id', 'fm_cart', 'fm_cart_sig'];
+
     /**
      * @param RequestInterface $request
      * @param RedirectFactory $redirectFactory
@@ -29,6 +33,7 @@ class Recover implements ActionInterface, HttpGetActionInterface
      * @param StoreScope $storeScope
      * @param StoreSettingsProvider $storeSettings
      * @param Configurable $configurableType
+     * @param \Fullmetrix\Connector\Model\CartLinkResolver $linkResolver
      */
     public function __construct(
         private readonly RequestInterface $request,
@@ -39,6 +44,7 @@ class Recover implements ActionInterface, HttpGetActionInterface
         private readonly StoreScope $storeScope,
         private readonly StoreSettingsProvider $storeSettings,
         private readonly Configurable $configurableType,
+        private readonly \Fullmetrix\Connector\Model\CartLinkResolver $linkResolver,
     ) {
     }
 
@@ -49,35 +55,35 @@ class Recover implements ActionInterface, HttpGetActionInterface
      */
     public function execute(): ResultInterface
     {
-        $redirect = $this->redirectFactory->create();
-        $redirect->setPath('checkout/cart');
-
+        $linkId = (string) $this->request->getParam(self::CART_PARAM, '');
         $payload = (string) $this->request->getParam('fm_cart', '');
         $signature = (string) $this->request->getParam('fm_cart_sig', '');
-        if ('' === $payload || '' === $signature || !$this->config->isRegistered()) {
-            return $redirect;
+
+        if (!$this->config->isRegistered()) {
+            return $this->buildRedirect('cart');
+        }
+        if ('' === $linkId && ('' === $payload || '' === $signature)) {
+            return $this->buildRedirect('cart');
         }
         if ((int) $this->cart->getQuote()->getStoreId() !== $this->storeSettings->getStoreId()) {
-            return $redirect;
+            return $this->buildRedirect('cart');
         }
 
-        $expected = hash_hmac('sha256', $payload, $this->config->getConnectionSecret());
-        if (!hash_equals($expected, $signature)) {
-            return $redirect;
-        }
+        $decoded = '' !== $linkId
+            ? $this->linkResolver->resolve($linkId)
+            : $this->decodePayload($payload, $signature);
 
-        $decoded = json_decode(
-            // The connector needs the raw call here, the Magento wrapper does not cover it.
-            // phpcs:ignore Magento2.Functions.DiscouragedFunction
-            base64_decode(strtr($payload, '-_', '+/')) ?: '',
-            true
-        );
         if (!\is_array($decoded)) {
-            return $redirect;
+            return $this->buildRedirect('cart');
+        }
+
+        $existing = [];
+        foreach ($this->cart->getQuote()->getAllVisibleItems() as $quoteItem) {
+            $existing[$this->quoteItemKey($quoteItem)] = true;
         }
 
         $items = \is_array($decoded['items'] ?? null) ? $decoded['items'] : [];
-        foreach (array_slice($items, 0, 100) as $item) {
+        foreach (array_slice($items, 0, self::MAX_ITEMS) as $item) {
             if (!\is_array($item)) {
                 continue;
             }
@@ -107,10 +113,31 @@ class Recover implements ActionInterface, HttpGetActionInterface
                 if (0 === \count($attributes) && (int) ($item['v'] ?? 0) > 0) {
                     $attributes = $this->attributesForLegacyVariation($product, (int) $item['v']);
                 }
+                $key = $this->itemKey($productId, $attributes);
+                if (isset($existing[$key])) {
+                    continue;
+                }
                 if (\count($attributes) > 0) {
                     $params['super_attribute'] = $attributes;
                 }
-                $this->cart->addProduct($product, $params);
+
+                try {
+                    $this->cart->addProduct($product, $params);
+                } catch (\Throwable) {
+                    if (0 === \count($attributes)) {
+                        continue;
+                    }
+                    $parentKey = $this->itemKey($productId, []);
+                    if (isset($existing[$parentKey])) {
+                        continue;
+                    }
+                    $this->cart->addProduct($product, ['qty' => $quantity]);
+                    $existing[$parentKey] = true;
+
+                    continue;
+                }
+
+                $existing[$key] = true;
             // The failure is optional data, the caller keeps going.
             // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
             } catch (\Throwable) {
@@ -134,7 +161,99 @@ class Recover implements ActionInterface, HttpGetActionInterface
         } catch (\Throwable) {
         }
 
+        $target = ('checkout' === ($decoded['target'] ?? 'cart')) ? 'checkout' : 'cart';
+
+        return $this->buildRedirect($target);
+    }
+
+    /**
+     * Redirect keeping the incoming query, minus the recovery parameters.
+     *
+     * @param string $target
+     * @return Redirect
+     */
+    private function buildRedirect(string $target): Redirect
+    {
+        $redirect = $this->redirectFactory->create();
+
+        $params = [];
+        $query = $this->request->getParams();
+        if (\is_array($query)) {
+            foreach ($query as $key => $value) {
+                if (\in_array($key, self::LINK_PARAMS, true)) {
+                    continue;
+                }
+                if (\is_string($key) && \is_scalar($value)) {
+                    $params[$key] = (string) $value;
+                }
+            }
+        }
+
+        $path = 'checkout' === $target ? 'checkout/index' : 'checkout/cart';
+        $redirect->setPath($path, \count($params) > 0 ? ['_query' => $params] : []);
+
         return $redirect;
+    }
+
+    /**
+     * Decodes the legacy signed payload.
+     *
+     * @param string $payload
+     * @param string $signature
+     * @return array|null
+     */
+    private function decodePayload(string $payload, string $signature): ?array
+    {
+        $expected = hash_hmac('sha256', $payload, $this->config->getConnectionSecret());
+        if (!hash_equals($expected, $signature)) {
+            return null;
+        }
+
+        $decoded = json_decode(
+            // The connector needs the raw call here, the Magento wrapper does not cover it.
+            // phpcs:ignore Magento2.Functions.DiscouragedFunction
+            base64_decode(strtr($payload, '-_', '+/')) ?: '',
+            true
+        );
+
+        return \is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * Identity of a cart line: the product plus its chosen options.
+     *
+     * @param int $productId
+     * @param array $attributes
+     * @return string
+     */
+    private function itemKey(int $productId, array $attributes): string
+    {
+        ksort($attributes);
+
+        return $productId . ':' . implode(',', array_map(
+            static fn ($attributeId, $optionId): string => $attributeId . '=' . $optionId,
+            array_keys($attributes),
+            $attributes
+        ));
+    }
+
+    /**
+     * Identity of an existing quote item, comparable with itemKey().
+     *
+     * @param \Magento\Quote\Model\Quote\Item $quoteItem
+     * @return string
+     */
+    private function quoteItemKey(\Magento\Quote\Model\Quote\Item $quoteItem): string
+    {
+        $productId = (int) $quoteItem->getProductId();
+        $parent = $quoteItem->getProduct();
+        $child = $quoteItem->getOptionByCode('simple_product')?->getProduct();
+
+        if (!$parent instanceof Product || !$child instanceof Product) {
+            return $this->itemKey($productId, []);
+        }
+
+        return $this->itemKey($productId, $this->attributesFromChild($parent, $child));
     }
 
     /**
@@ -156,6 +275,23 @@ class Recover implements ActionInterface, HttpGetActionInterface
             if (!$child instanceof Product || !$this->storeScope->includesProduct($child)) {
                 return [];
             }
+
+            return $this->attributesFromChild($parent, $child);
+        } catch (\Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * Maps a configurable child onto its attribute/option pairs.
+     *
+     * @param Product $parent
+     * @param Product $child
+     * @return array
+     */
+    private function attributesFromChild(Product $parent, Product $child): array
+    {
+        try {
             $attributes = [];
             foreach ($this->configurableType->getConfigurableAttributes($parent) as $attribute) {
                 $productAttribute = $attribute->getProductAttribute();

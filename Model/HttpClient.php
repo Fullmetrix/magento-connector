@@ -51,10 +51,18 @@ class HttpClient
      * @param string $body
      * @param array $headers
      * @param int $timeoutSeconds
+     * @param int|null $connectTimeoutMs
+     * @param int|null $totalTimeoutMs
      * @return array
      */
-    public function postJson(string $url, string $body, array $headers, int $timeoutSeconds = 10): array
-    {
+    public function postJson(
+        string $url,
+        string $body,
+        array $headers,
+        int $timeoutSeconds = 10,
+        ?int $connectTimeoutMs = null,
+        ?int $totalTimeoutMs = null
+    ): array {
         // The connector needs the raw call here, the Magento wrapper does not cover it.
         // phpcs:ignore Magento2.Functions.DiscouragedFunction
         $ch = curl_init($url);
@@ -65,8 +73,8 @@ class HttpClient
             CURLOPT_POSTFIELDS => $body,
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => $timeoutSeconds,
-            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT_MS => $totalTimeoutMs ?? ($timeoutSeconds * 1000),
+            CURLOPT_CONNECTTIMEOUT_MS => $connectTimeoutMs ?? 5000,
             CURLOPT_NOSIGNAL => true,
         ]);
         // The connector needs the raw call here, the Magento wrapper does not cover it.
