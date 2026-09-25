@@ -1,0 +1,154 @@
+<?php
+/** @var \Fullmetrix\Connector\Block\Adminhtml\Connection $block */
+/** @var \Magento\Framework\Escaper $escaper */
+
+$registered = $block->isRegistered();
+$steps = [
+    __('Create your Fullmetrix account at fullmetrix.com'),
+    __('Copy the connection code shown in your Fullmetrix dashboard'),
+    __('Paste the code below and click Connect'),
+];
+?>
+<div class="fullmetrix-panel">
+    <div class="fullmetrix-card">
+        <div class="fullmetrix-brand">
+            <img
+                class="fullmetrix-brand-logo"
+                src="<?= $escaper->escapeUrl($block->getLogoUrl()) ?>"
+                alt="Fullmetrix"
+            />
+            <div class="fullmetrix-brand-text">
+                <div class="fullmetrix-brand-name">Fullmetrix</div>
+                <p class="fullmetrix-brand-tagline">
+                    <?= $escaper->escapeHtml(__('E-commerce analytics and reporting')) ?>
+                </p>
+            </div>
+            <?php if ($registered): ?>
+                <span class="fullmetrix-pill fullmetrix-pill-success">
+                    <span class="fullmetrix-pill-dot"></span>
+                    <?= $escaper->escapeHtml(__('Connected')) ?>
+                </span>
+            <?php endif; ?>
+        </div>
+
+        <?php if ($registered): ?>
+            <label class="fullmetrix-label" for="fullmetrix_connection_code">
+                <?= $escaper->escapeHtml(__('Connection code')) ?>
+            </label>
+            <form
+                class="fullmetrix-row"
+                action="<?= $escaper->escapeUrl($block->getDisconnectUrl()) ?>"
+                method="post"
+            >
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+                <input
+                    type="text"
+                    class="fullmetrix-code-input"
+                    id="fullmetrix_connection_code"
+                    value="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"
+                    readonly
+                />
+                <button type="submit" class="fullmetrix-btn fullmetrix-btn-secondary">
+                    <?= $escaper->escapeHtml(__('Disconnect')) ?>
+                </button>
+            </form>
+            <p class="fullmetrix-note">
+                <?= $escaper->escapeHtml(__('Store view: %1', $block->getConnectedStoreLabel())) ?>
+                &middot;
+                <a
+                    href="<?= $escaper->escapeUrl($block->getAppUrl()) ?>"
+                    target="_blank"
+                    rel="noopener"
+                >
+                    <?= $escaper->escapeHtml(__('Open the Fullmetrix dashboard')) ?>
+                </a>
+            </p>
+        <?php else: ?>
+            <ol class="fullmetrix-steps">
+                <?php foreach ($steps as $index => $step): ?>
+                    <li>
+                        <span class="fullmetrix-step-number"><?= (int) $index + 1 ?></span>
+                        <span class="fullmetrix-step-text"><?= $escaper->escapeHtml($step) ?></span>
+                    </li>
+                <?php endforeach; ?>
+            </ol>
+
+            <form action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" method="post">
+                <?= /* @noEscape */ $block->getBlockHtml('formkey') ?>
+
+                <label class="fullmetrix-label" for="fullmetrix_store_id">
+                    <?= $escaper->escapeHtml(__('Store view')) ?>
+                </label>
+                <select
+                    class="fullmetrix-select"
+                    id="fullmetrix_store_id"
+                    name="store_id"
+                    data-fullmetrix-select="1"
+                >
+                    <?php foreach ($block->getAvailableStores() as $store): ?>
+                        <option value="<?= $escaper->escapeHtmlAttr((string) $store['id']) ?>">
+                            <?= $escaper->escapeHtml($store['label']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <label class="fullmetrix-label" for="fullmetrix_connection_code">
+                    <?= $escaper->escapeHtml(__('Connection code')) ?>
+                </label>
+                <div class="fullmetrix-row">
+                    <input
+                        type="text"
+                        class="fullmetrix-code-input"
+                        id="fullmetrix_connection_code"
+                        name="connection_code"
+                        placeholder="FMTX-XXXX-XXXX-XXXX"
+                        required
+                    />
+                    <button type="submit" class="fullmetrix-btn fullmetrix-btn-primary">
+                        <?= $escaper->escapeHtml(__('Connect')) ?>
+                    </button>
+                </div>
+            </form>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($registered): ?>
+        <div class="fullmetrix-card">
+            <div class="fullmetrix-card-title">
+                <?= $escaper->escapeHtml(__('Sync activity')) ?>
+            </div>
+
+            <?php if ($block->isSyncInProgress()): ?>
+                <span class="fullmetrix-pill fullmetrix-pill-active">
+                    <span class="fullmetrix-pill-dot"></span>
+                    <?= $escaper->escapeHtml(__('Sync in progress')) ?>
+                </span>
+            <?php elseif ($block->hasCompletedSync()): ?>
+                <span class="fullmetrix-pill fullmetrix-pill-success">
+                    <span class="fullmetrix-pill-dot"></span>
+                    <?= $escaper->escapeHtml(__('Sync complete')) ?>
+                </span>
+
+                <div class="fullmetrix-tiles">
+                    <?php foreach ($block->getLastSyncEntities() as $entityLabel => $entityCount): ?>
+                        <?php if ($entityCount > 0): ?>
+                            <div class="fullmetrix-tile">
+                                <span class="fullmetrix-tile-count">
+                                    <?= $escaper->escapeHtml($block->formatCount($entityCount)) ?>
+                                </span>
+                                <span class="fullmetrix-tile-label">
+                                    <?= $escaper->escapeHtml((string) $entityLabel) ?>
+                                </span>
+                            </div>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <span class="fullmetrix-pill fullmetrix-pill-waiting">
+                    <span class="fullmetrix-pill-dot"></span>
+                    <?= $escaper->escapeHtml(__('Waiting for sync')) ?>
+                </span>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+</div>

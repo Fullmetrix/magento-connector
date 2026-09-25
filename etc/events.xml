@@ -1,0 +1,90 @@
+<?xml version="1.0"?>
+<config
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd"
+>
+    <event name="sales_order_save_after">
+        <observer name="fullmetrix_order_save" instance="Fullmetrix\Connector\Observer\OrderSaveAfter"/>
+    </event>
+    <event name="customer_save_after">
+        <observer name="fullmetrix_customer_save" instance="Fullmetrix\Connector\Observer\CustomerSaveAfter"/>
+    </event>
+    <event name="catalog_product_save_after">
+        <observer name="fullmetrix_product_save" instance="Fullmetrix\Connector\Observer\ProductSaveAfter"/>
+    </event>
+    <event name="catalog_category_save_after">
+        <observer name="fullmetrix_category_save" instance="Fullmetrix\Connector\Observer\CategorySaveAfter"/>
+    </event>
+    <event name="salesrule_rule_save_before">
+        <observer name="fullmetrix_salesrule_save_capture" instance="Fullmetrix\Connector\Observer\SalesRuleSaveAfter"/>
+    </event>
+    <event name="salesrule_rule_save_after">
+        <observer name="fullmetrix_salesrule_save" instance="Fullmetrix\Connector\Observer\SalesRuleSaveAfter"/>
+    </event>
+    <event name="salesrule_coupon_save_after">
+        <observer name="fullmetrix_coupon_save" instance="Fullmetrix\Connector\Observer\CouponSaveAfter"/>
+    </event>
+    <event name="sales_order_creditmemo_save_after">
+        <observer name="fullmetrix_creditmemo_save" instance="Fullmetrix\Connector\Observer\CreditmemoSaveAfter"/>
+    </event>
+    <event name="newsletter_subscriber_save_after">
+        <observer name="fullmetrix_subscriber_save" instance="Fullmetrix\Connector\Observer\SubscriberSaveAfter"/>
+    </event>
+    <event name="sales_order_place_after">
+        <observer name="fullmetrix_order_place" instance="Fullmetrix\Connector\Observer\OrderPlaceAfter"/>
+    </event>
+    <event name="cataloginventory_stock_item_save_commit_after">
+        <observer name="fullmetrix_legacy_inventory_save" instance="Fullmetrix\Connector\Observer\InventorySaveAfter"/>
+    </event>
+    <event name="sales_order_delete_before">
+        <observer name="fullmetrix_order_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="sales_order_delete_commit_after">
+        <observer name="fullmetrix_order_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="customer_delete_before">
+        <observer name="fullmetrix_customer_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="customer_delete_commit_after">
+        <observer name="fullmetrix_customer_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="catalog_product_delete_before">
+        <observer name="fullmetrix_product_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="catalog_product_delete_commit_after">
+        <observer name="fullmetrix_product_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="catalog_category_delete_before">
+        <observer name="fullmetrix_category_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="catalog_category_delete_commit_after">
+        <observer name="fullmetrix_category_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="salesrule_rule_delete_before">
+        <observer
+            name="fullmetrix_salesrule_delete_capture"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
+    </event>
+    <event name="salesrule_rule_delete_commit_after">
+        <observer name="fullmetrix_salesrule_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="salesrule_coupon_delete_before">
+        <observer name="fullmetrix_coupon_delete_capture" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="salesrule_coupon_delete_commit_after">
+        <observer name="fullmetrix_coupon_delete_commit" instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"/>
+    </event>
+    <event name="sales_order_creditmemo_delete_before">
+        <observer
+            name="fullmetrix_creditmemo_delete_capture"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
+    </event>
+    <event name="sales_order_creditmemo_delete_commit_after">
+        <observer
+            name="fullmetrix_creditmemo_delete_commit"
+            instance="Fullmetrix\Connector\Observer\EntityDeleteAfter"
+        />
+    </event>
+</config>

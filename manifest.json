@@ -1,0 +1,5 @@
+{
+  "version": "1.5.0",
+  "minimumRequired": "1.1.0",
+  "changelog": "Le module ne travaille plus pendant les requêtes de vos clients : la commande, le panier, les imports et les mises à jour de stock n'enregistrent plus que l'identifiant de ce qui a changé, et le cron Magento envoie tout à Fullmetrix chaque minute. Aucune erreur du module ne peut plus interrompre une commande ou une sauvegarde, et les pages de la boutique ne contactent plus jamais Fullmetrix."
+}
