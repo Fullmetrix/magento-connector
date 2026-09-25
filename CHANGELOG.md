@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+
+- Same code as 1.5.0, republished under a new version number.
+
 ## 1.5.0
 
 - The module no longer works during shoppers' requests. Checkout, cart, login, imports and stock updates only record the identifier of what changed, and the Magento cron sends everything to Fullmetrix every minute.
