@@ -1462,18 +1462,23 @@ class EntitySerializer
             }
             // Colonnes listees: une colonne binaire serait lue en memoire pour
             // chaque ligne avant d'etre ecartee par le filtre.
-            $select = '`' . implode('`, `', $meta['columns']) . '`';
-            $where = '`' . $fkColumn . '` IN (' . $idList . ')';
+            $select = 'fm_row.`' . implode('`, fm_row.`', $meta['columns']) . '`';
+            $from = '`' . $table . '` fm_row';
             if ('' !== $pkColumn && $pkColumn !== $fkColumn) {
                 // Une seule ligne par entite, decidee en SQL: une table de
                 // journal ne doit jamais etre chargee entiere.
-                $where = '(`' . $fkColumn . '`, `' . $pkColumn . '`) IN ('
-                    . 'SELECT `' . $fkColumn . '`, MAX(`' . $pkColumn . '`) FROM `' . $table . '`'
-                    . ' WHERE `' . $fkColumn . '` IN (' . $idList . ') GROUP BY `' . $fkColumn . '`)';
+                $from .= ' INNER JOIN (SELECT `' . $fkColumn . '` AS fm_fk, MAX(`' . $pkColumn . '`) AS fm_pk'
+                    . ' FROM `' . $table . '` WHERE `' . $fkColumn . '` IN (' . $idList . ')'
+                    . ' GROUP BY `' . $fkColumn . '`) fm_last'
+                    . ' ON (fm_row.`' . $fkColumn . '` = fm_last.fm_fk AND fm_row.`' . $pkColumn . '` = fm_last.fm_pk)';
             }
+            $order = [] === $meta['order'] ? '' : ' ORDER BY fm_row.`' . implode('`, fm_row.`', $meta['order']) . '`';
             try {
                 $connection = $this->resourceConnection->getConnection();
-                $rows = $connection->fetchAll('SELECT ' . $select . ' FROM `' . $table . '` WHERE ' . $where);
+                $rows = $connection->fetchAll(
+                    'SELECT ' . $select . ' FROM ' . $from
+                    . ' WHERE fm_row.`' . $fkColumn . '` IN (' . $idList . ')' . $order
+                );
             } catch (\Throwable) {
                 continue;
             }
@@ -1519,12 +1524,7 @@ class EntitySerializer
         try {
             $connection = $this->resourceConnection->getConnection();
             $rows = $connection->fetchAll(
-                'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column,
-                        GROUP_CONCAT(DISTINCT
-                            CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\',
-                                \'tinyblob\', \'binary\', \'varbinary\')
-                                 THEN NULL ELSE c.COLUMN_NAME END
-                        ) AS safe_columns
+                'SELECT c.TABLE_NAME AS table_name, MIN(k.COLUMN_NAME) AS pk_column
                  FROM information_schema.COLUMNS c
                  LEFT JOIN information_schema.KEY_COLUMN_USAGE k
                         ON (k.TABLE_SCHEMA = c.TABLE_SCHEMA AND k.TABLE_NAME = c.TABLE_NAME
@@ -1546,21 +1546,85 @@ class EntitySerializer
             return [];
         }
 
+        $kept = [];
         foreach ($rows as $row) {
             $name = (string) $row['table_name'];
             if ($this->isCoreTable($name)) {
                 continue;
             }
-            $tables[$name] = [
-                'pk' => (string) ($row['pk_column'] ?? ''),
-                'columns' => array_values(array_filter(explode(',', (string) ($row['safe_columns'] ?? '')))),
-            ];
-            if (\count($tables) >= self::MAX_RELATED_TABLES) {
+            $kept[$name] = (string) ($row['pk_column'] ?? '');
+            if (\count($kept) >= self::MAX_RELATED_TABLES) {
                 break;
             }
         }
 
+        try {
+            $tables = $this->loadRelatedColumns($fkColumn, $kept);
+        } catch (\Throwable) {
+            $tables = [];
+        }
+
         $this->relatedTablesCache[$fkColumn] = $tables;
+
+        return $tables;
+    }
+
+    /**
+     * Lists the readable columns and the primary key order of each related table.
+     *
+     * @param string $fkColumn
+     * @param array $kept
+     * @return array
+     */
+    private function loadRelatedColumns(string $fkColumn, array $kept): array
+    {
+        if ([] === $kept) {
+            return [];
+        }
+
+        $connection = $this->resourceConnection->getConnection();
+        $rows = $connection->fetchAll(
+            'SELECT c.TABLE_NAME AS table_name, c.COLUMN_NAME AS column_name,
+                    CASE WHEN c.DATA_TYPE IN (\'blob\', \'mediumblob\', \'longblob\',
+                        \'tinyblob\', \'binary\', \'varbinary\')
+                         THEN 0 ELSE 1 END AS readable,
+                    k.ORDINAL_POSITION AS pk_position
+             FROM information_schema.COLUMNS c
+             LEFT JOIN information_schema.KEY_COLUMN_USAGE k
+                    ON (k.TABLE_SCHEMA = c.TABLE_SCHEMA AND k.TABLE_NAME = c.TABLE_NAME
+                        AND k.COLUMN_NAME = c.COLUMN_NAME AND k.CONSTRAINT_NAME = \'PRIMARY\')
+             WHERE c.TABLE_SCHEMA = DATABASE()
+               AND c.TABLE_NAME IN (' . implode(', ', array_fill(0, \count($kept), '?')) . ')
+             ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION',
+            array_keys($kept)
+        );
+
+        $columns = [];
+        $keys = [];
+        foreach ($rows as $row) {
+            $table = (string) $row['table_name'];
+            $column = (string) $row['column_name'];
+            if (1 === (int) $row['readable']) {
+                $columns[$table][] = $column;
+            }
+            if (null !== $row['pk_position'] && '' !== (string) $row['pk_position']) {
+                $keys[$table][(int) $row['pk_position']] = $column;
+            }
+        }
+
+        $tables = [];
+        foreach ($kept as $table => $pkColumn) {
+            if (!isset($columns[$table]) || !\in_array($fkColumn, $columns[$table], true)) {
+                continue;
+            }
+            $order = $keys[$table] ?? [];
+            ksort($order);
+            $tables[$table] = [
+                'pk' => $pkColumn,
+                'columns' => $columns[$table],
+                'order' => array_values($order),
+            ];
+        }
 
         return $tables;
     }

@@ -63,11 +63,11 @@ class StockProvider
                     $this->storeSettings->getWebsiteCode()
                 );
                 $stockId = (int) $stock->getStockId();
-                $quantity = (float) $this->getProductSalableQty->execute($sku, $stockId);
+                $status = $this->isProductSalable->execute($sku, $stockId) ? 'instock' : 'outofstock';
 
                 return [
-                    'status' => $this->isProductSalable->execute($sku, $stockId) ? 'instock' : 'outofstock',
-                    'quantity' => $quantity,
+                    'status' => $status,
+                    'quantity' => $this->salableQuantity($sku, $stockId),
                     'manage' => true,
                 ];
             // The failure is optional data, the caller keeps going.
@@ -90,5 +90,24 @@ class StockProvider
         } catch (\Throwable) {
             return ['status' => 'outofstock', 'quantity' => null, 'manage' => false];
         }
+    }
+
+    /**
+     * Returns the salable quantity of a product on a stock, or null for a composite product.
+     *
+     * @param string $sku
+     * @param int $stockId
+     * @return float|null
+     */
+    private function salableQuantity(string $sku, int $stockId): ?float
+    {
+        try {
+            return (float) $this->getProductSalableQty->execute($sku, $stockId);
+        // A composite product has no salable quantity of its own.
+        // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
+        } catch (\Throwable) {
+        }
+
+        return null;
     }
 }

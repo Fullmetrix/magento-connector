@@ -150,7 +150,7 @@ class EntityPaginator
             ->modify(sprintf('-%d days -%d hours', $days, $hours))
             ->format('Y-m-d H:i:s');
         $collection->addFieldToFilter($updatedField, ['gteq' => $cutoff]);
-        $collection->setOrder($updatedField, 'DESC');
+        $collection->setOrder($this->idField($entity), 'ASC');
         $collection->getSelect()->limit(min(500000, max(1, $limit)), max(0, $offset));
 
         $result = [];

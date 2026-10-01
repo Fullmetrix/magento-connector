@@ -16,8 +16,9 @@ class Updated extends AbstractApiAction implements HttpGetActionInterface
      */
     public function execute(): ResultInterface
     {
-        if (!$this->verifier->verify($this->request)) {
-            return $this->unauthorized();
+        $denied = $this->guard('updated');
+        if (null !== $denied) {
+            return $denied;
         }
 
         $type = (string) $this->request->getParam('type', 'orders');

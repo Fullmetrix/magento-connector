@@ -1,5 +1,5 @@
 {
-  "version": "1.5.1",
+  "version": "1.6.1",
   "minimumRequired": "1.1.0",
-  "changelog": "Le module ne travaille plus pendant les requêtes de vos clients : la commande, le panier, les imports et les mises à jour de stock n'enregistrent plus que l'identifiant de ce qui a changé, et le cron Magento envoie tout à Fullmetrix chaque minute. Aucune erreur du module ne peut plus interrompre une commande ou une sauvegarde, et les pages de la boutique ne contactent plus jamais Fullmetrix."
+  "changelog": "Les appels de Fullmetrix utilisent une signature plus sûre, liée à la requête exacte et impossible à rejouer pour les commandes, et l'ancienne signature est refusée. Une requête d'export qui échoue toujours arrête le flux au lieu de laisser Fullmetrix croire la synchronisation terminée, et la création de code promo refuse les valeurs invalides. Le stock des produits configurables suit le stock affecté au site, comme Magento. Après la mise à jour, lancez setup:upgrade, setup:di:compile et cache:flush."
 }

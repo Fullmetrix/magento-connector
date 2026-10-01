@@ -46,11 +46,10 @@ class Command extends AbstractApiAction implements HttpPostActionInterface, Csrf
      */
     public function execute(): ResultInterface
     {
-        // The connector needs the raw call here, the Magento wrapper does not cover it.
-        // phpcs:ignore Magento2.Functions.DiscouragedFunction
-        $body = (string) file_get_contents('php://input');
-        if (!$this->verifier->verify($this->request, $body)) {
-            return $this->unauthorized();
+        $body = $this->rawBody();
+        $denied = $this->guard('command', true, $body);
+        if (null !== $denied) {
+            return $denied;
         }
 
         $decoded = json_decode($body, true);

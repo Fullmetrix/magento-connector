@@ -14,12 +14,15 @@ use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Controller\ResultInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Streams every supported entity to Fullmetrix as newline delimited JSON.
  */
 class Stream extends AbstractApiAction implements HttpGetActionInterface
 {
+    private const MAX_CONSECUTIVE_FAILURES = 3;
+
     /**
      * Output stream the NDJSON lines are written to.
      *
@@ -35,6 +38,7 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
      * @param EntitySerializer $serializer
      * @param Config $config
      * @param WebhookDispatcher $dispatcher
+     * @param LoggerInterface $logger
      */
     public function __construct(
         RequestInterface $request,
@@ -44,6 +48,7 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
         EntitySerializer $serializer,
         Config $config,
         private readonly WebhookDispatcher $dispatcher,
+        private readonly LoggerInterface $logger,
     ) {
         parent::__construct($request, $jsonFactory, $verifier, $paginator, $serializer, $config);
     }
@@ -55,8 +60,9 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
      */
     public function execute(): ResultInterface
     {
-        if (!$this->verifier->verify($this->request)) {
-            return $this->unauthorized();
+        $denied = $this->guard('stream');
+        if (null !== $denied) {
+            return $denied;
         }
 
         $entity = (string) $this->request->getParam('entity', '');
@@ -83,37 +89,74 @@ class Stream extends AbstractApiAction implements HttpGetActionInterface
 
         $totalCount = 0;
         $counts = [];
+        $failed = false;
         foreach ($entities as $currentEntity) {
             $count = 0;
+            $lastCursor = $fromId;
+            $failures = 0;
             $prefetch = function (array $ids) use ($currentEntity): void {
                 $this->serializer->releaseLoadedEntities();
                 $this->serializer->prefetchRelated($currentEntity, $ids);
             };
-            foreach ($this->paginator->streamKeyset($currentEntity, 1000, $since, $prefetch, $fromId) as $row) {
-                $payload = $this->serializeRow($currentEntity, $row);
-                if (null === $payload) {
-                    continue;
+            while (true) {
+                try {
+                    $rows = $this->paginator->streamKeyset($currentEntity, 1000, $since, $prefetch, $lastCursor);
+                    foreach ($rows as $row) {
+                        $payload = $this->serializeRow($currentEntity, $row);
+                        if (null === $payload) {
+                            continue;
+                        }
+                        $cursor = $this->paginator->cursorValue($currentEntity, $row);
+                        $line = ['type' => $this->lineType($currentEntity), '_cursor' => $cursor, 'data' => $payload];
+                        $this->emit($line);
+                        $lastCursor = $cursor ?? $lastCursor;
+                        $failures = 0;
+                        ++$count;
+                    }
+                    break;
+                } catch (\Throwable $e) {
+                    $this->logger->critical($e);
+                    if (++$failures >= self::MAX_CONSECUTIVE_FAILURES) {
+                        $this->emit([
+                            'type' => 'fatal',
+                            'entity' => $currentEntity,
+                            'reason' => 'query_failed',
+                            'last_id' => (int) $lastCursor,
+                            'sent' => $count,
+                        ]);
+                        $failed = true;
+                        break 2;
+                    }
+                    $this->pauseAfterFailure($failures);
                 }
-                // Le curseur est la colonne de keyset, `coupon_id` pour les coupons,
-                // alors que le payload expose `rule_id`.
-                $cursor = $this->paginator->cursorValue($currentEntity, $row);
-                $this->emit(['type' => $this->lineType($currentEntity), '_cursor' => $cursor, 'data' => $payload]);
-                ++$count;
             }
             $this->emit(['type' => 'entity_complete', 'entity' => $currentEntity, 'count' => $count]);
             $counts[$currentEntity] = $count;
             $totalCount += $count;
         }
 
-        $this->config->markSyncCompleted($counts);
-
-        $this->emit(['type' => 'done', 'completed_at' => $this->isoNow(), 'count' => $totalCount]);
+        if (!$failed) {
+            $this->config->markSyncCompleted($counts);
+            $this->emit(['type' => 'done', 'completed_at' => $this->isoNow(), 'count' => $totalCount]);
+        }
 
         $this->flushQueueIfCronStalled();
 
         // The body is already written and flushed, letting Magento render a response would corrupt the stream.
         // phpcs:ignore Magento2.Security.LanguageConstruct.ExitUsage
         exit(0);
+    }
+
+    /**
+     * Waits before reading the same page again.
+     *
+     * @param int $failures
+     * @return void
+     */
+    protected function pauseAfterFailure(int $failures): void
+    {
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        sleep(2 * $failures);
     }
 
     /**

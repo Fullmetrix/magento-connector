@@ -8,6 +8,9 @@
             <general>
                 <api_base>https://fullmetrix.com/api/plugin</api_base>
             </general>
+            <security>
+                <signature_v1>0</signature_v1>
+            </security>
         </fullmetrix>
     </default>
 </config>

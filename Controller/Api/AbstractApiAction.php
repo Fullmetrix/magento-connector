@@ -33,17 +33,49 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
     }
 
     /**
-     * Builds an unauthorized result.
+     * Nonce of the verified v2 request, used to sign the JSON response.
      *
-     * @return Json
+     * @var string|null
      */
-    protected function unauthorized(): Json
-    {
-        $result = $this->jsonFactory->create();
-        $result->setHttpResponseCode(401);
-        $result->setData(['success' => false, 'error' => 'unauthorized']);
+    protected ?string $responseNonce = null;
 
-        return $result;
+    /**
+     * Authorizes the call, returns the error result or null when allowed.
+     *
+     * @param string $operation
+     * @param bool $command
+     * @param string|null $body
+     * @return Json|null
+     */
+    protected function guard(string $operation, bool $command = false, ?string $body = null): ?Json
+    {
+        $decision = $this->verifier->authorize($this->request, $operation, $body ?? $this->rawBody(), $command);
+        $this->responseNonce = $decision['nonce'];
+        if (200 === $decision['status']) {
+            return null;
+        }
+
+        return $this->json([
+            'success' => false,
+            'error' => match ($decision['status']) {
+                409 => 'replayed_request',
+                503 => 'unavailable',
+                default => 'unauthorized',
+            },
+            'reason' => $decision['reason'],
+            'server_time' => time(),
+        ], $decision['status']);
+    }
+
+    /**
+     * Reads the raw request body.
+     *
+     * @return string
+     */
+    protected function rawBody(): string
+    {
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        return (string) file_get_contents('php://input');
     }
 
     /**
@@ -57,7 +89,14 @@ abstract class AbstractApiAction implements \Magento\Framework\App\ActionInterfa
     {
         $result = $this->jsonFactory->create();
         $result->setHttpResponseCode($status);
-        $result->setData($data);
+        $body = (string) json_encode($data, \JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $result->setJsonData($body);
+        $result->setHeader('X-Fullmetrix-Plugin-Version', Config::VERSION, true);
+        if (null !== $this->responseNonce) {
+            foreach ($this->verifier->responseHeaders($this->responseNonce, $body) as $name => $value) {
+                $result->setHeader($name, $value, true);
+            }
+        }
 
         return $result;
     }

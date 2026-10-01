@@ -9,7 +9,7 @@ use Magento\Framework\FlagManager;
 
 class Config
 {
-    public const VERSION = '1.5.1';
+    public const VERSION = '1.6.1';
 
     public const FLAG_CONNECTION_CODE = 'fullmetrix_connection_code';
     public const FLAG_CONNECTION_SECRET = 'fullmetrix_connection_secret';
@@ -25,8 +25,14 @@ class Config
     public const FLAG_LAST_SYNC = 'fullmetrix_last_sync';
     public const FLAG_SYNC_IN_PROGRESS = 'fullmetrix_sync_in_progress';
     public const FLAG_QUEUE_PURGED_AT = 'fullmetrix_queue_purged_at';
+    public const FLAG_COMMAND_NONCES = 'fullmetrix_command_nonces';
+    public const NONCE_STORED = 'stored';
+    public const NONCE_REPLAYED = 'replayed';
+    public const NONCE_FAILED = 'failed';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
+    private const XML_PATH_SIGNATURE_V1 = 'fullmetrix/security/signature_v1';
+    private const COMMAND_NONCES_KEPT = 64;
     private const CONFIG_TTL_SECONDS = 1800;
     private const CONFIG_FAILURE_TTL_SECONDS = 300;
     private const SYNC_STALE_AFTER_SECONDS = 600;
@@ -123,6 +129,42 @@ class Config
         return (bool) $this->readFlag(self::FLAG_REGISTERED)
             && '' !== $this->getConnectionCode()
             && '' !== $this->getConnectionSecret();
+    }
+
+    /**
+     * Tells whether the local emergency setting re-enables v1 signatures.
+     *
+     * @return bool
+     */
+    public function allowsSignatureV1(): bool
+    {
+        return '1' === (string) $this->scopeConfig->getValue(self::XML_PATH_SIGNATURE_V1);
+    }
+
+    /**
+     * Records a command nonce and tells whether it was stored, already used or not storable.
+     *
+     * @param string $nonce
+     * @return string
+     */
+    public function rememberCommandNonce(string $nonce): string
+    {
+        try {
+            $seen = $this->flagManager->getFlagData(self::FLAG_COMMAND_NONCES);
+            $seen = \is_array($seen) ? $seen : [];
+            if (\in_array($nonce, $seen, true)) {
+                return self::NONCE_REPLAYED;
+            }
+            $seen[] = $nonce;
+            $saved = $this->flagManager->saveFlag(
+                self::FLAG_COMMAND_NONCES,
+                array_values(\array_slice($seen, -self::COMMAND_NONCES_KEPT))
+            );
+        } catch (\Throwable) {
+            return self::NONCE_FAILED;
+        }
+
+        return false === $saved ? self::NONCE_FAILED : self::NONCE_STORED;
     }
 
     /**

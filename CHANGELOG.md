@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.1
+
+- Le statut de stock d'un produit configurable vient du stock affecté au site, comme la vente dans Magento. Il ne retombe plus sur l'ancien indicateur du produit parent quand sa quantité vendable n'existe pas.
+
+## 1.6.0
+
+- Les appels de Fullmetrix sont signés en v2 : méthode, query exacte, horodatage, nonce, empreinte du corps et opération visée (`fm_op`). Un paramètre pris dans le chemin au lieu de la query signée est refusé. Une commande ne peut pas être rejouée : son nonce est gardé parmi les 64 derniers.
+- L'ancienne signature v1 est refusée. Elle ne se réactive qu'en secours, depuis le serveur, par `bin/magento config:set fullmetrix/security/signature_v1 1`.
+- Les réponses JSON à Fullmetrix sont signées.
+- Une requête d'export qui échoue trois fois de suite arrête le flux par une ligne `fatal`, sans marqueur de fin. Un échec passager reprend après la dernière ligne envoyée.
+- La liste des identifiants mis à jour est triée par identifiant : une commande modifiée pendant le parcours n'est plus sautée.
+- Les tables tierces liées sont lues par jointure, filtrées par identifiant et dans un ordre stable. Leur liste de colonnes n'est plus tronquée.
+- Les commandes `coupon.update` et `coupon.delete` disparaissent. `coupon.create` refuse un code invalide, un montant négatif ou non numérique et une limite d'usage inférieure à 1.
+- Après la mise à jour, lancer `setup:upgrade`, `setup:di:compile` et `cache:flush`.
+
 ## 1.5.1
 
 - Same code as 1.5.0, republished under a new version number.

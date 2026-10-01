@@ -38,8 +38,6 @@ class CouponCommandHandler
     {
         return match ($action) {
             'coupon.create' => $this->createCoupon($payload),
-            'coupon.update' => $this->updateCoupon($payload),
-            'coupon.delete' => $this->deleteCoupon($payload),
             default => ['success' => false, 'error' => 'unknown_action'],
         };
     }
@@ -52,9 +50,19 @@ class CouponCommandHandler
      */
     private function createCoupon(array $payload): array
     {
-        $code = strtoupper(trim((string) ($payload['code'] ?? '')));
-        if ('' === $code) {
-            return ['success' => false, 'error' => 'missing_code'];
+        $rawCode = $payload['code'] ?? null;
+        if (!\is_string($rawCode) || 1 !== preg_match('/^[A-Za-z0-9_\-]{1,64}$/', trim($rawCode))) {
+            return ['success' => false, 'error' => 'invalid_code'];
+        }
+        $code = strtoupper(trim($rawCode));
+        if (\array_key_exists('amount', $payload) && (!is_numeric($payload['amount'])
+            || !is_finite((float) $payload['amount']) || (float) $payload['amount'] < 0)) {
+            return ['success' => false, 'error' => 'invalid_amount'];
+        }
+        foreach (['usageLimit', 'usageLimitPerUser'] as $limit) {
+            if (\array_key_exists($limit, $payload) && (!is_numeric($payload[$limit]) || (int) $payload[$limit] < 1)) {
+                return ['success' => false, 'error' => 'invalid_' . $limit];
+            }
         }
         if (null !== $this->findRuleByCode($code)) {
             return ['success' => false, 'error' => 'code_already_exists'];
@@ -70,97 +78,6 @@ class CouponCommandHandler
         }
 
         return ['success' => true, 'data' => ['id' => (int) $rule->getRuleId(), 'code' => $code]];
-    }
-
-    /**
-     * Updates the coupon.
-     *
-     * @param array $payload
-     * @return array
-     */
-    private function updateCoupon(array $payload): array
-    {
-        if (null !== $this->generatedCouponReference($payload)) {
-            return ['success' => false, 'error' => 'generated_coupon_read_only'];
-        }
-        $code = strtoupper(trim((string) ($payload['code'] ?? '')));
-        $rule = null;
-        if (isset($payload['id']) && ctype_digit((string) $payload['id']) && (int) $payload['id'] > 0) {
-            $rule = $this->ruleFactory->create()->load((int) $payload['id']);
-            if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
-                $rule = null;
-            }
-        }
-        if (null === $rule && '' !== $code) {
-            $rule = $this->findRuleByCode($code);
-        }
-        if (null === $rule) {
-            return ['success' => false, 'error' => 'coupon_not_found'];
-        }
-
-        $this->applyPayload($rule, '' !== $code ? $code : (string) $rule->getCouponCode(), $payload);
-
-        try {
-            $rule->save();
-        } catch (\Throwable $e) {
-            return ['success' => false, 'error' => 'save_failed: ' . $e->getMessage()];
-        }
-
-        return ['success' => true, 'data' => [
-            'id' => (int) $rule->getRuleId(),
-            'code' => (string) $rule->getCouponCode(),
-        ]];
-    }
-
-    /**
-     * Deletes the coupon.
-     *
-     * @param array $payload
-     * @return array
-     */
-    private function deleteCoupon(array $payload): array
-    {
-        $generatedCouponReference = $this->generatedCouponReference($payload);
-        if (null !== $generatedCouponReference) {
-            try {
-                [$ruleId, $couponId] = $generatedCouponReference;
-                $coupon = $this->couponFactory->create()->load($couponId);
-                if (!$coupon->getCouponId() || (int) $coupon->getRuleId() !== $ruleId) {
-                    return ['success' => false, 'error' => 'coupon_not_found'];
-                }
-                $rule = $this->ruleFactory->create()->load($ruleId);
-                if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
-                    return ['success' => false, 'error' => 'coupon_not_found'];
-                }
-                $coupon->delete();
-
-                return ['success' => true, 'data' => ['deleted' => true]];
-            } catch (\Throwable $e) {
-                return ['success' => false, 'error' => 'delete_failed: ' . $e->getMessage()];
-            }
-        }
-        $code = strtoupper(trim((string) ($payload['code'] ?? '')));
-        $rule = null;
-        if (isset($payload['id']) && ctype_digit((string) $payload['id']) && (int) $payload['id'] > 0) {
-            $rule = $this->ruleFactory->create()->load((int) $payload['id']);
-            if (!$rule->getRuleId() || !$this->ruleInScope($rule)) {
-                $rule = null;
-            }
-        }
-        if (null === $rule && '' !== $code) {
-            $rule = $this->findRuleByCode($code);
-        }
-        if (null === $rule) {
-            return ['success' => false, 'error' => 'coupon_not_found'];
-        }
-
-        try {
-            $rule->delete();
-        } catch (\Throwable $e) {
-            return ['success' => false, 'error' => 'delete_failed: ' . $e->getMessage()];
-        }
-
-        return ['success' => true, 'data' => ['deleted' => true]];
     }
 
     /**
@@ -324,22 +241,6 @@ class CouponCommandHandler
         } catch (\Throwable) {
             return $value;
         }
-    }
-
-    /**
-     * Generated coupon reference.
-     *
-     * @param array $payload
-     * @return array|null
-     */
-    private function generatedCouponReference(array $payload): ?array
-    {
-        $id = (string) ($payload['id'] ?? '');
-        if (1 !== preg_match('/^(\d+):(\d+)$/', $id, $matches)) {
-            return null;
-        }
-
-        return [(int) $matches[1], (int) $matches[2]];
     }
 
     /**

@@ -17,8 +17,9 @@ class Counts extends AbstractApiAction implements HttpGetActionInterface
      */
     public function execute(): ResultInterface
     {
-        if (!$this->verifier->verify($this->request)) {
-            return $this->unauthorized();
+        $denied = $this->guard('counts');
+        if (null !== $denied) {
+            return $denied;
         }
 
         $counts = [];
