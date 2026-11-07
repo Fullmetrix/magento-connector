@@ -9,7 +9,7 @@ use Magento\Framework\FlagManager;
 
 class Config
 {
-    public const VERSION = '1.6.1';
+    public const VERSION = '1.7.0';
 
     public const FLAG_CONNECTION_CODE = 'fullmetrix_connection_code';
     public const FLAG_CONNECTION_SECRET = 'fullmetrix_connection_secret';
@@ -26,12 +26,18 @@ class Config
     public const FLAG_SYNC_IN_PROGRESS = 'fullmetrix_sync_in_progress';
     public const FLAG_QUEUE_PURGED_AT = 'fullmetrix_queue_purged_at';
     public const FLAG_COMMAND_NONCES = 'fullmetrix_command_nonces';
+    public const FLAG_TRACKER_SYNC = 'fullmetrix_tracker_sync';
     public const NONCE_STORED = 'stored';
     public const NONCE_REPLAYED = 'replayed';
     public const NONCE_FAILED = 'failed';
 
     private const XML_PATH_API_BASE = 'fullmetrix/general/api_base';
     private const XML_PATH_SIGNATURE_V1 = 'fullmetrix/security/signature_v1';
+    private const XML_PATH_PAGE_CACHE_TTL = 'system/full_page_cache/ttl';
+    private const LOCAL_SCRIPT_KEY = '_fullmetrixLocalScript';
+    private const TAG_SETTINGS_KEY = '_fullmetrixTag';
+    private const RESERVED_KEYS = [self::LOCAL_SCRIPT_KEY, self::TAG_SETTINGS_KEY];
+    private const DEFAULT_PAGE_CACHE_TTL_SECONDS = 86400;
     private const COMMAND_NONCES_KEPT = 64;
     private const CONFIG_TTL_SECONDS = 1800;
     private const CONFIG_FAILURE_TTL_SECONDS = 300;
@@ -242,6 +248,7 @@ class Config
         $this->removeFlag(self::FLAG_REFRESH_ALL_PRODUCTS);
         $this->removeFlag(self::FLAG_LAST_SYNC);
         $this->removeFlag(self::FLAG_SYNC_IN_PROGRESS);
+        $this->removeFlag(self::FLAG_TRACKER_SYNC);
     }
 
     /**
@@ -347,9 +354,8 @@ class Config
         if (0 === $storedAt || (time() - $storedAt) > self::CONFIG_TTL_SECONDS) {
             return null;
         }
-        $data = $this->readFlag(self::FLAG_PLUGIN_CONFIG);
 
-        return \is_array($data) ? $data : null;
+        return $this->getStalePluginConfig();
     }
 
     /**
@@ -360,8 +366,14 @@ class Config
     public function getStalePluginConfig(): ?array
     {
         $data = $this->readFlag(self::FLAG_PLUGIN_CONFIG);
+        if (!\is_array($data)) {
+            return null;
+        }
+        foreach (self::RESERVED_KEYS as $key) {
+            unset($data[$key]);
+        }
 
-        return \is_array($data) ? $data : null;
+        return [] === $data ? null : $data;
     }
 
     /**
@@ -384,9 +396,151 @@ class Config
      */
     public function savePluginConfig(array $config): void
     {
+        $stored = $this->readStoredReserved();
+        foreach (self::RESERVED_KEYS as $key) {
+            unset($config[$key]);
+            if (\is_array($stored[$key] ?? null) && [] !== $stored[$key]) {
+                $config[$key] = $stored[$key];
+            }
+        }
         $this->writeFlag(self::FLAG_PLUGIN_CONFIG, $config);
         $this->writeFlag(self::FLAG_PLUGIN_CONFIG_AT, time());
         $this->removeFlag(self::FLAG_PLUGIN_CONFIG_FAILED_AT);
+    }
+
+    /**
+     * Returns the state of the tracker file served from the store, kept beside the plugin configuration.
+     *
+     * The storefront already reads the plugin configuration, so the tag decision costs no extra query.
+     *
+     * @return array
+     */
+    public function getLocalScript(): array
+    {
+        $data = $this->readFlag(self::FLAG_PLUGIN_CONFIG);
+        $state = \is_array($data) ? ($data[self::LOCAL_SCRIPT_KEY] ?? null) : null;
+
+        return \is_array($state) ? $state : [];
+    }
+
+    /**
+     * Stores the state of the tracker file without touching the freshness of the plugin configuration.
+     *
+     * @param array $state
+     * @return void
+     */
+    public function saveLocalScript(array $state): void
+    {
+        $this->saveReserved(self::LOCAL_SCRIPT_KEY, $state);
+    }
+
+    /**
+     * Tells whether the storefront tracker is enabled, from the last configuration the cron pulled.
+     *
+     * @return bool
+     */
+    public function isTrackerEnabled(): bool
+    {
+        $pluginConfig = $this->getStalePluginConfig();
+        if (null === $pluginConfig) {
+            return true;
+        }
+
+        return !\array_key_exists('trackerEnabled', $pluginConfig) || false !== $pluginConfig['trackerEnabled'];
+    }
+
+    /**
+     * Returns the tag settings pushed by Fullmetrix: the cookie keeper switch, its lifetime and the tag attributes.
+     *
+     * @return array
+     */
+    public function getTagSettings(): array
+    {
+        $data = $this->readFlag(self::FLAG_PLUGIN_CONFIG);
+
+        return TagSettings::normalize(\is_array($data) ? ($data[self::TAG_SETTINGS_KEY] ?? null) : null);
+    }
+
+    /**
+     * Stores the tag settings without touching the freshness of the plugin configuration.
+     *
+     * @param array $settings
+     * @return void
+     */
+    public function saveTagSettings(array $settings): void
+    {
+        $this->saveReserved(self::TAG_SETTINGS_KEY, [] === $settings ? [] : TagSettings::normalize($settings));
+    }
+
+    /**
+     * Writes one module owned entry beside the plugin configuration.
+     *
+     * @param string $key
+     * @param array $value
+     * @return void
+     */
+    private function saveReserved(string $key, array $value): void
+    {
+        $data = $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG);
+        $data = \is_array($data) ? $data : [];
+        if ([] === $value) {
+            unset($data[$key]);
+        } else {
+            $data[$key] = $value;
+        }
+        if ([] === $data) {
+            $this->removeFlag(self::FLAG_PLUGIN_CONFIG);
+
+            return;
+        }
+        $this->writeFlag(self::FLAG_PLUGIN_CONFIG, $data);
+    }
+
+    /**
+     * Returns the circuit breaker state of the tracker file refresh.
+     *
+     * @return array
+     */
+    public function getTrackerSync(): array
+    {
+        $value = $this->readFlag(self::FLAG_TRACKER_SYNC);
+
+        return \is_array($value) ? $value : [];
+    }
+
+    /**
+     * Stores the circuit breaker state of the tracker file refresh.
+     *
+     * @param array $state
+     * @return void
+     */
+    public function saveTrackerSync(array $state): void
+    {
+        $this->writeFlag(self::FLAG_TRACKER_SYNC, $state);
+    }
+
+    /**
+     * Forgets the tracker file state and its circuit breaker.
+     *
+     * @return void
+     */
+    public function forgetLocalScript(): void
+    {
+        $this->saveLocalScript([]);
+        $this->saveTagSettings([]);
+        $this->removeFlag(self::FLAG_TRACKER_SYNC);
+    }
+
+    /**
+     * Returns how long the full page cache keeps a page, which bounds how long an old tag stays served.
+     *
+     * @return int
+     */
+    public function getPageCacheTtl(): int
+    {
+        $ttl = (int) $this->scopeConfig->getValue(self::XML_PATH_PAGE_CACHE_TTL);
+
+        return $ttl > 0 ? $ttl : self::DEFAULT_PAGE_CACHE_TTL_SECONDS;
     }
 
     /**
@@ -475,6 +629,22 @@ class Config
     public function getConfiguredStoreId(): int
     {
         return (int) $this->readFlag(self::FLAG_STORE_ID);
+    }
+
+    /**
+     * Reads the module owned entries straight from the flag table, so a concurrent write is not lost.
+     *
+     * @return array
+     */
+    private function readStoredReserved(): array
+    {
+        try {
+            $data = $this->flagManager->getFlagData(self::FLAG_PLUGIN_CONFIG);
+        } catch (\Throwable) {
+            $data = $this->readFlag(self::FLAG_PLUGIN_CONFIG);
+        }
+
+        return \is_array($data) ? array_intersect_key($data, array_flip(self::RESERVED_KEYS)) : [];
     }
 
     /**

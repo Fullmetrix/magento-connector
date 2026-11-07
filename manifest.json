@@ -1,5 +1,5 @@
 {
-  "version": "1.6.1",
+  "version": "1.7.0",
   "minimumRequired": "1.1.0",
-  "changelog": "Les appels de Fullmetrix utilisent une signature plus sûre, liée à la requête exacte et impossible à rejouer pour les commandes, et l'ancienne signature est refusée. Une requête d'export qui échoue toujours arrête le flux au lieu de laisser Fullmetrix croire la synchronisation terminée, et la création de code promo refuse les valeurs invalides. Le stock des produits configurables suit le stock affecté au site, comme Magento. Après la mise à jour, lancez setup:upgrade, setup:di:compile et cache:flush."
+  "changelog": "Le cookie visiteur est reposé par le serveur de la boutique pour tenir sur Safari, par un point léger qui répond avant le routage, sans session. Le script de suivi est servi depuis la boutique, dans pub/media/fullmetrix, et rafraîchi par le cron Magento toutes les 10 minutes. Sans fichier valide, la balise distante d'avant reste en place. Le checkout de Magento 2.4.7 et plus n'est plus bloqué par la politique de sécurité, et la page de succès expose la commande au script. Après la mise à jour, lancez setup:upgrade, setup:di:compile, setup:static-content:deploy (avec les langues de la boutique) puis cache:flush : en mode production, sans setup:static-content:deploy, la boutique répond 500."
 }

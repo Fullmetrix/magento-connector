@@ -11,8 +11,11 @@ composer require fullmetrix/magento-connector
 bin/magento module:enable Fullmetrix_Connector
 bin/magento setup:upgrade
 bin/magento setup:di:compile
+bin/magento setup:static-content:deploy
 bin/magento cache:flush
 ```
+
+In production mode, `setup:upgrade` clears `pub/static`: always run `setup:static-content:deploy` (with your store locales, for example `fr_FR en_US`) before `cache:flush`, for an installation and for every update. Without it the store answers 500.
 
 ## Connection
 

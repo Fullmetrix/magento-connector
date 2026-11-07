@@ -214,6 +214,60 @@ class HttpClient
     }
 
     /**
+     * Fetches a JSON document within strict time limits, never following a redirect.
+     *
+     * @param string $url
+     * @param array $headers
+     * @param int $totalTimeoutMs
+     * @param int $connectTimeoutMs
+     * @param bool $compressed
+     * @return array
+     */
+    public function getJson(
+        string $url,
+        array $headers,
+        int $totalTimeoutMs,
+        int $connectTimeoutMs,
+        bool $compressed = false
+    ): array {
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        $ch = curl_init($url);
+        $options = [
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT_MS => $totalTimeoutMs,
+            CURLOPT_CONNECTTIMEOUT_MS => $connectTimeoutMs,
+            CURLOPT_NOSIGNAL => true,
+            CURLOPT_FOLLOWLOCATION => false,
+        ];
+        if ($compressed) {
+            $options[CURLOPT_ENCODING] = '';
+        }
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        curl_setopt_array($ch, $options);
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        $responseBody = curl_exec($ch);
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        $error = curl_error($ch);
+        // The connector needs the raw call here, the Magento wrapper does not cover it.
+        // phpcs:ignore Magento2.Functions.DiscouragedFunction
+        curl_close($ch);
+
+        return [
+            'status' => $status,
+            'body' => \is_string($responseBody) ? $responseBody : '',
+            'error' => $error,
+        ];
+    }
+
+    /**
      * Returns the json fast.
      *
      * @param string $url

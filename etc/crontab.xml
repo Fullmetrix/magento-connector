@@ -7,5 +7,10 @@
         <job name="fullmetrix_flush_webhooks" instance="Fullmetrix\Connector\Cron\FlushWebhooks" method="execute">
             <schedule>* * * * *</schedule>
         </job>
+        <job name="fullmetrix_sync_tracker_script"
+             instance="Fullmetrix\Connector\Cron\SyncTrackerScript"
+             method="execute">
+            <schedule>*/10 * * * *</schedule>
+        </job>
     </group>
 </config>

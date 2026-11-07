@@ -1,0 +1,8 @@
+<?php
+/** @var \Fullmetrix\Connector\Block\OrderReference $block */
+$attributes = $block->getOrderAttributes();
+if ([] === $attributes) {
+    return;
+}
+?>
+<div id="fullmetrix-order" hidden<?= /* @noEscape */ $block->getOrderAttributesHtml($escaper) ?>></div>

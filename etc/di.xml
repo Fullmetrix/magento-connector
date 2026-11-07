@@ -14,6 +14,18 @@
             </argument>
         </arguments>
     </type>
+    <type name="Fullmetrix\Connector\Observer\OrderPlaceAfter">
+        <arguments>
+            <argument name="customerSession" xsi:type="object">Magento\Customer\Model\Session\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="Magento\Framework\App\Http">
+        <plugin
+            name="fullmetrix_keeper_endpoint"
+            type="Fullmetrix\Connector\Plugin\KeeperEndpoint"
+            sortOrder="-1000"
+        />
+    </type>
     <type name="Magento\InventoryApi\Api\SourceItemsSaveInterface">
         <plugin
             name="fullmetrix_inventory_source_items_save"

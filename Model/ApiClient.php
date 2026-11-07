@@ -124,11 +124,6 @@ class ApiClient
      */
     public function isTrackerEnabled(): bool
     {
-        $pluginConfig = $this->config->getStalePluginConfig();
-        if (null === $pluginConfig) {
-            return true;
-        }
-
-        return !\array_key_exists('trackerEnabled', $pluginConfig) || false !== $pluginConfig['trackerEnabled'];
+        return $this->config->isTrackerEnabled();
     }
 }

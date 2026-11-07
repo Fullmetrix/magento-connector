@@ -1,11 +1,32 @@
 <?php
 /** @var \Fullmetrix\Connector\Block\Tracker $block */
+/** @var \Magento\Framework\View\Helper\SecureHtmlRenderer $secureRenderer */
 if (!$block->shouldRender()) {
     return;
 }
+$localScriptUrl = $block->getLocalScriptUrl();
+$extraHtml = $block->getExtraAttributesHtml($escaper);
 ?>
+<?php if ('' !== $localScriptUrl): ?>
+<script
+    async
+    id="fullmetrix-tracker"
+    src="<?= $escaper->escapeUrl($localScriptUrl) ?>"
+    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"
+    data-platform="magento"
+    data-fm-origin="<?= $escaper->escapeHtmlAttr($block->getTrackerOrigin()) ?>"<?= /* @noEscape */ $extraHtml ?>
+
+></script>
+    <?= /* @noEscape */ $secureRenderer->renderEventListenerAsTag(
+        'onerror',
+        $block->getRemoteFallbackJs(),
+        '#fullmetrix-tracker'
+    ) ?>
+<?php else: ?>
 <script
     async
     src="<?= $escaper->escapeUrl($block->getTrackerUrl()) ?>"
-    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"
+    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"<?= /* @noEscape */ $extraHtml ?>
+
 ></script>
+<?php endif; ?>
