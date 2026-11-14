@@ -97,9 +97,11 @@ class HttpClient
         // The connector needs the raw call here, the Magento wrapper does not cover it.
         // phpcs:ignore Magento2.Functions.DiscouragedFunction
         $error = curl_error($ch);
-        // The connector needs the raw call here, the Magento wrapper does not cover it.
-        // phpcs:ignore Magento2.Functions.DiscouragedFunction
-        curl_close($ch);
+        if (\PHP_VERSION_ID < 80000) {
+            // The connector needs the raw call here, the Magento wrapper does not cover it.
+            // phpcs:ignore Magento2.Functions.DiscouragedFunction
+            curl_close($ch);
+        }
 
         return [
             'status' => $status,
@@ -206,9 +208,11 @@ class HttpClient
     private function closeReusableHandle(): void
     {
         if (null !== $this->handle) {
-            // The connector needs the raw call here, the Magento wrapper does not cover it.
-            // phpcs:ignore Magento2.Functions.DiscouragedFunction
-            curl_close($this->handle);
+            if (\PHP_VERSION_ID < 80000) {
+                // The connector needs the raw call here, the Magento wrapper does not cover it.
+                // phpcs:ignore Magento2.Functions.DiscouragedFunction
+                curl_close($this->handle);
+            }
             $this->handle = null;
         }
     }
@@ -256,9 +260,11 @@ class HttpClient
         // The connector needs the raw call here, the Magento wrapper does not cover it.
         // phpcs:ignore Magento2.Functions.DiscouragedFunction
         $error = curl_error($ch);
-        // The connector needs the raw call here, the Magento wrapper does not cover it.
-        // phpcs:ignore Magento2.Functions.DiscouragedFunction
-        curl_close($ch);
+        if (\PHP_VERSION_ID < 80000) {
+            // The connector needs the raw call here, the Magento wrapper does not cover it.
+            // phpcs:ignore Magento2.Functions.DiscouragedFunction
+            curl_close($ch);
+        }
 
         return [
             'status' => $status,
@@ -299,9 +305,11 @@ class HttpClient
         // The connector needs the raw call here, the Magento wrapper does not cover it.
         // phpcs:ignore Magento2.Functions.DiscouragedFunction
         $error = curl_error($ch);
-        // The connector needs the raw call here, the Magento wrapper does not cover it.
-        // phpcs:ignore Magento2.Functions.DiscouragedFunction
-        curl_close($ch);
+        if (\PHP_VERSION_ID < 80000) {
+            // The connector needs the raw call here, the Magento wrapper does not cover it.
+            // phpcs:ignore Magento2.Functions.DiscouragedFunction
+            curl_close($ch);
+        }
 
         return [
             'status' => $status,

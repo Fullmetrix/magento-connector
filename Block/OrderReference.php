@@ -30,30 +30,28 @@ class OrderReference extends Template
     }
 
     /**
-     * Returns the order attributes as escaped markup for the success page template.
-     *
-     * @param \Magento\Framework\Escaper $escaper
-     * @return string
-     */
-    public function getOrderAttributesHtml($escaper): string
-    {
-        $html = '';
-        foreach ($this->getOrderAttributes() as $name => $value) {
-            $html .= ' ' . $escaper->escapeHtmlAttr($name)
-                . '="' . $escaper->escapeHtmlAttr($value) . '"';
-        }
-
-        return $html;
-    }
-
-    /**
-     * Returns the order the success page shows, as attributes the tracker reads.
+     * Returns the order the success page shows, as one JSON attribute the script reads, empty when there is none.
      *
      * The order is the one Magento already loaded into the checkout session for this page.
      *
+     * @return string
+     */
+    public function getOrderJson(): string
+    {
+        $order = $this->getOrderData();
+        if ([] === $order) {
+            return '';
+        }
+
+        return (string) json_encode($order, \JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Returns the order fields the script reads.
+     *
      * @return array
      */
-    public function getOrderAttributes(): array
+    public function getOrderData(): array
     {
         try {
             if (!$this->config->isActive() || !$this->apiClient->isTrackerEnabled()) {
@@ -66,10 +64,10 @@ class OrderReference extends Template
             }
 
             return [
-                'data-fm-order-id' => (string) $orderId,
-                'data-fm-order-number' => (string) $order->getIncrementId(),
-                'data-fm-order-total' => number_format((float) $order->getGrandTotal(), 2, '.', ''),
-                'data-fm-order-currency' => (string) $order->getOrderCurrencyCode(),
+                'id' => (string) $orderId,
+                'number' => (string) $order->getIncrementId(),
+                'total' => number_format((float) $order->getGrandTotal(), 2, '.', ''),
+                'currency' => (string) $order->getOrderCurrencyCode(),
             ];
         } catch (\Throwable) {
             return [];

@@ -10,10 +10,18 @@ use Magento\Framework\Filesystem\Directory\WriteInterface;
 
 class LocalScript
 {
-    public const DIRECTORY = 'fullmetrix';
+    public const DIRECTORY = 'kvo';
+    public const LEGACY_DIRECTORY = 'fullmetrix';
 
-    private const SCRIPT_PATTERN = '/^fm-[A-Za-z0-9_-]{1,64}\.js$/';
-    private const TEMPORARY_PATTERN = '/^\.fm-[0-9a-f]{8,32}\.tmp$/';
+    private const SCRIPT_PATTERN = '/^[0-9a-f]{12}\.js$/';
+    private const TEMPORARY_PATTERN = '/^\.[0-9a-f]{16}\.tmp$/';
+    private const LEGACY_SCRIPT_PATTERN = '/^fm-[0-9a-f]{12}\.js$/';
+    private const LEGACY_TEMPORARY_PATTERN = '/^\.fm-[0-9a-f]{16}\.tmp$/';
+    private const OWNED = [
+        self::DIRECTORY => [self::SCRIPT_PATTERN, self::TEMPORARY_PATTERN],
+        self::LEGACY_DIRECTORY => [self::LEGACY_SCRIPT_PATTERN, self::LEGACY_TEMPORARY_PATTERN],
+    ];
+    private const INDEX = 'index.html';
     private const TEMPORARY_LIFETIME_SECONDS = 3600;
     private const MIN_AGE_SECONDS = 604800;
     private const PAGE_CACHE_MARGIN_SECONDS = 86400;
@@ -52,7 +60,7 @@ class LocalScript
     // phpcs:ignore Magento2.Functions.StaticFunction
     public static function pathFor(string $version): string
     {
-        return self::DIRECTORY . '/fm-' . $version . '.js';
+        return self::DIRECTORY . '/' . $version . '.js';
     }
 
     /**
@@ -69,7 +77,7 @@ class LocalScript
         if (!$media->isDirectory(self::DIRECTORY)) {
             $media->create(self::DIRECTORY);
         }
-        $index = self::DIRECTORY . '/index.html';
+        $index = self::DIRECTORY . '/' . self::INDEX;
         if (!$media->isExist($index)) {
             $media->writeFile($index, '');
         }
@@ -79,7 +87,7 @@ class LocalScript
             return $path;
         }
 
-        $temporary = self::DIRECTORY . '/.fm-' . bin2hex(random_bytes(8)) . '.tmp';
+        $temporary = self::DIRECTORY . '/.' . bin2hex(random_bytes(8)) . '.tmp';
         try {
             $media->writeFile($temporary, $content);
             if (!hash_equals($sha256, hash('sha256', (string) $media->readFile($temporary)))) {
@@ -118,9 +126,7 @@ class LocalScript
         $media = $this->media();
         $now = time();
         $scripts = [];
-        foreach ($media->read(self::DIRECTORY) as $entry) {
-            $parts = explode('/', (string) $entry);
-            $name = (string) end($parts);
+        foreach ($this->names($media, self::DIRECTORY) as $name) {
             $path = self::DIRECTORY . '/' . $name;
             if (1 === preg_match(self::TEMPORARY_PATTERN, $name)) {
                 if ($this->modifiedAt($media, $path) < $now - self::TEMPORARY_LIFETIME_SECONDS) {
@@ -149,16 +155,52 @@ class LocalScript
     }
 
     /**
-     * Deletes the whole tracker directory.
+     * Deletes the files this module wrote, here and in the directory of the versions before 1.8.0.
+     *
+     * A directory goes only once nothing else is left in it, an empty index page included.
      *
      * @return void
      */
     public function removeAll(): void
     {
         $media = $this->media();
-        if ($media->isExist(self::DIRECTORY)) {
-            $media->delete(self::DIRECTORY);
+        foreach (self::OWNED as $directory => [$scriptPattern, $temporaryPattern]) {
+            if (!$media->isDirectory($directory)) {
+                continue;
+            }
+            foreach ($this->names($media, $directory) as $name) {
+                if (1 === preg_match($scriptPattern, $name) || 1 === preg_match($temporaryPattern, $name)) {
+                    $this->deleteQuietly($media, $directory . '/' . $name);
+                }
+            }
+            $index = $directory . '/' . self::INDEX;
+            if ([self::INDEX] === $this->names($media, $directory) && $media->isFile($index)
+                && '' === (string) $media->readFile($index)
+            ) {
+                $this->deleteQuietly($media, $index);
+            }
+            if ([] === $this->names($media, $directory)) {
+                $this->deleteQuietly($media, $directory);
+            }
         }
+    }
+
+    /**
+     * Returns the names of the entries of a media directory.
+     *
+     * @param WriteInterface $media
+     * @param string $directory
+     * @return string[]
+     */
+    private function names(WriteInterface $media, string $directory): array
+    {
+        $names = [];
+        foreach ($media->read($directory) as $entry) {
+            $parts = explode('/', (string) $entry);
+            $names[] = (string) end($parts);
+        }
+
+        return $names;
     }
 
     /**
@@ -190,7 +232,7 @@ class LocalScript
     }
 
     /**
-     * Deletes a file, a failure only leaves it for the next run.
+     * Deletes a file or an empty directory, a failure only leaves it for the next run.
      *
      * @param WriteInterface $media
      * @param string $path

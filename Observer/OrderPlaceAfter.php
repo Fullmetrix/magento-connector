@@ -7,7 +7,6 @@ namespace Fullmetrix\Connector\Observer;
 use Fullmetrix\Connector\Model\CookieReader;
 use Fullmetrix\Connector\Model\TrackingQueue;
 use Fullmetrix\Connector\Model\StoreScope;
-use Fullmetrix\Connector\Model\WebhookQueue;
 use Magento\Customer\Model\Session as CustomerSession;
 use Magento\Framework\App\Area;
 use Magento\Framework\App\State;
@@ -25,7 +24,6 @@ class OrderPlaceAfter implements ObserverInterface
     /**
      * @param TrackingQueue $trackingQueue
      * @param StoreScope $storeScope
-     * @param WebhookQueue $webhookQueue
      * @param CookieReader $cookieReader
      * @param State $appState
      * @param CustomerSession $customerSession
@@ -33,7 +31,6 @@ class OrderPlaceAfter implements ObserverInterface
     public function __construct(
         private readonly TrackingQueue $trackingQueue,
         private readonly StoreScope $storeScope,
-        private readonly WebhookQueue $webhookQueue,
         private readonly CookieReader $cookieReader,
         private readonly State $appState,
         private readonly CustomerSession $customerSession,
@@ -41,7 +38,7 @@ class OrderPlaceAfter implements ObserverInterface
     }
 
     /**
-     * Records who placed the order, the subscription is checked by the cron.
+     * Records who placed the order, with the visitor and the order reference.
      *
      * @param Observer $observer
      * @return void
@@ -64,13 +61,6 @@ class OrderPlaceAfter implements ObserverInterface
                 'customer_id' => $order->getCustomerId() ? (int) $order->getCustomerId() : null,
                 'identified_at' => (int) round(microtime(true) * 1000),
             ]);
-            $billing = $order->getBillingAddress();
-            $this->webhookQueue->enqueueOrderConsentCheck(
-                $email,
-                (int) $order->getStore()->getWebsiteId(),
-                null !== $billing ? (string) $billing->getTelephone() : '',
-                null !== $billing ? (string) $billing->getCountryId() : ''
-            );
         } catch (DeadlockException $e) {
             throw $e;
         // The failure is optional data, the caller keeps going.

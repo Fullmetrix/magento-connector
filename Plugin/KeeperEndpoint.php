@@ -11,9 +11,11 @@ use Magento\Framework\App\Request\Http as HttpRequest;
 
 class KeeperEndpoint
 {
-    public const PATH = '/fullmetrix/keep';
+    public const PATH = '/kvo/k';
+    public const LEGACY_PATH = '/fullmetrix/keep';
 
-    private const COOKIE_NAME = 'fm_vid';
+    private const COOKIE_NAME = '_kvo_v';
+    private const LEGACY_COOKIE_NAME = 'fm_vid';
     private const UUID_V4_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/';
     private const MAX_BODY_BYTES = 64;
 
@@ -50,7 +52,7 @@ class KeeperEndpoint
     }
 
     /**
-     * Tells whether the request is a POST on the keeper path below the store base path.
+     * Tells whether the request is a POST on the keeper path, or its former path, below the store base path.
      *
      * The Magento path info is not used: it needs the store resolution of the area.
      *
@@ -62,17 +64,18 @@ class KeeperEndpoint
             return false;
         }
         $uri = (string) $this->request->getRequestUri();
-        if (!str_contains($uri, self::PATH)) {
+        if (!str_contains($uri, self::PATH) && !str_contains($uri, self::LEGACY_PATH)) {
             return false;
         }
         $queryAt = strpos($uri, '?');
         $path = false === $queryAt ? $uri : substr($uri, 0, $queryAt);
+        $base = rtrim((string) $this->request->getBaseUrl(), '/');
 
-        return rtrim((string) $this->request->getBaseUrl(), '/') . self::PATH === $path;
+        return $base . self::PATH === $path || $base . self::LEGACY_PATH === $path;
     }
 
     /**
-     * Checks the call and sets the visitor cookie again with the same value.
+     * Checks the call and sets the visitor cookie again with the same value, under both names when both were sent.
      *
      * @return KeeperResponse
      */
@@ -93,37 +96,50 @@ class KeeperEndpoint
             return $this->respond(400);
         }
 
-        $values = $this->cookieValues((string) $this->request->getServer('HTTP_COOKIE', ''));
-        if (\count($values) > 1) {
+        $header = (string) $this->request->getServer('HTTP_COOKIE', '');
+        $fresh = $this->cookieValues($header, self::COOKIE_NAME);
+        $legacy = $this->cookieValues($header, self::LEGACY_COOKIE_NAME);
+        if (\count($fresh) > 1 || \count($legacy) > 1) {
             return $this->respond(409);
         }
-        $visitorId = $values[0] ?? '';
+        if (isset($fresh[0]) && '' === $fresh[0]) {
+            $fresh = [];
+        }
+        if ([] === $fresh && [] === $legacy) {
+            return $this->respond(400);
+        }
+        $visitorId = $fresh[0] ?? $legacy[0];
         if (1 !== preg_match(self::UUID_V4_PATTERN, $visitorId)
             || !hash_equals($visitorId, (string) $this->request->getContent())
         ) {
             return $this->respond(400);
         }
 
-        $cookie = self::COOKIE_NAME . '=' . $visitorId
+        $suffix = '=' . $visitorId
             . '; Max-Age=' . ($settings['maxAgeDays'] * 86400)
             . '; Path=/; SameSite=Lax'
             . ($this->request->isSecure() ? '; Secure' : '');
+        $headers = [['X-Fm-Keeper', '1'], ['X-Kvo-K', '1'], ['Set-Cookie', self::COOKIE_NAME . $suffix]];
+        if (isset($legacy[0]) && $legacy[0] === $visitorId) {
+            $headers[] = ['Set-Cookie', self::LEGACY_COOKIE_NAME . $suffix];
+        }
 
-        return $this->respond(204, [['X-Fm-Keeper', '1'], ['Set-Cookie', $cookie]]);
+        return $this->respond(204, $headers);
     }
 
     /**
-     * Returns every value sent for the visitor cookie, read from the raw header so duplicates are seen.
+     * Returns every value sent for one cookie name, read from the raw header so duplicates are seen.
      *
      * @param string $header
+     * @param string $name
      * @return array
      */
-    private function cookieValues(string $header): array
+    private function cookieValues(string $header, string $name): array
     {
         $values = [];
         foreach (explode(';', $header) as $pair) {
             $parts = explode('=', $pair, 2);
-            if (self::COOKIE_NAME === trim($parts[0])) {
+            if ($name === trim($parts[0])) {
                 $values[] = trim($parts[1] ?? '');
             }
         }

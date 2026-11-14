@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.8.0
+
+- Balise de mesure neutre : `id="kvo"`, clé opaque `data-kvo` (reçue du paquet, validée `^[A-Z2-7]{20}$`, sinon le code de connexion), `data-kvo-p="mg"`, `data-kvo-v`, `data-kvo-k` (chemin du point cookie) et, seulement si l'origine des envois n'est pas `fullmetrix.com`, `data-kvo-o`. Les attributs d'exclusion des extensions de cache (`data-no-optimize`, `data-no-defer`, `data-no-minify`, `data-cfasync`, `nowprocket`, `data-noptimize`, `data-ao-skip`, `data-pagespeed-no-defer`, `data-wpfc-render`) sont posés en dur ; plus aucun attribut ne vient du paquet.
+- Le repli est construit par le module, sans attribut `type` : `https://fullmetrix.com/assets/js/s.js?k=<clé>`. Sans fichier local, la balise charge cette adresse.
+- Le fichier est servi depuis `pub/media/kvo/<version>.js` ; `pub/media/fullmetrix/` des versions précédentes reste jusqu'à la désinstallation, qui supprime les deux.
+- L'origine des envois publiée par Fullmetrix n'est acceptée que si c'est exactement `https://fullmetrix.com` ou `https://<label>.<domaine de la boutique>` (hôte de l'adresse de base, sans `www.`). Un collecteur de politique de sécurité (`Magento_Csp`, désormais requis par `composer.json` et `module.xml`) ajoute cet hôte en `script-src` et `connect-src` ; `fullmetrix.com` reste dans `csp_whitelist.xml`.
+- Point cookie `POST /kvo/k` (l'ancien `/fullmetrix/keep` répond encore) : lit `_kvo_v` puis `fm_vid`, 409 seulement si un même nom est envoyé deux fois, repose `_kvo_v` et, si `fm_vid` portait la même valeur, `fm_vid` aussi : deux lignes `Set-Cookie` possibles. Répond `X-Kvo-K: 1` et `X-Fm-Keeper: 1`, toujours avant l'aire et sans session.
+- La page de succès expose la commande par `data-kvo-order` (JSON `id`, `number`, `total`, `currency`) sur `<div id="kvo-o">`.
+- Retirés : l'envoi du consentement newsletter (`SubscriberSaveAfter`, vérification d'abonnement à la commande, file `consent`), les événements panier serveur (`CartAddProduct`, `CartSaveAfter`). L'identification à la connexion et à la commande reste. Les lignes `consent` encore en file sont supprimées sans envoi.
+- `curl_close()` n'est appelé qu'avant PHP 8.0.
+- Service tiers et cookies : la boutique charge le script de mesure de Fullmetrix (politique de confidentialité `https://fullmetrix.com/privacy`). Cookies posés sur le domaine de la boutique : `_kvo_v` (visiteur, 390 jours au plus), `_kvo_s` (session, 30 min), `_kvo_c` (contact après connexion ou commande) ; les anciens `fm_*` des visiteurs déjà connus restent jusqu'à leur expiration. Le consentement de suivi n'est pas géré par le module : la commande publique `fm('consent', {...})` est appelée par le gestionnaire de balises du marchand.
+- Après la mise à jour, lancer `setup:upgrade`, `setup:di:compile`, `setup:static-content:deploy` (avec les langues de la boutique), `cron:run --group=fullmetrix` puis `cache:flush`. En mode production, `setup:upgrade` vide `pub/static` : sans `setup:static-content:deploy`, la boutique répond 500. Sans le passage de cron avant `cache:flush`, les pages servent la balise distante avec le code de connexion jusqu'au prochain passage (10 min au plus) ; la pause du téléchargement héritée de la 1.7 est remise à zéro par le changement de version.
+- Le collecteur de politique de sécurité lit seulement les réglages du module déjà chargés pour la page (table `flag`, cache 60 s), sans aucun appel réseau.
+
 ## 1.7.0
 
 - Le script de suivi est servi depuis la boutique : toutes les 10 minutes, la tâche planifiée `fullmetrix_sync_tracker_script` (groupe `fullmetrix`) télécharge le script choisi par Fullmetrix en 3 s au plus, vérifie son empreinte et son origine, puis l'écrit dans `pub/media/fullmetrix/fm-<version>.js` par un fichier temporaire renommé. La balise pointe alors vers ce fichier, avec `data-platform="magento"` et `data-fm-origin`. Les envois partent toujours vers Fullmetrix.

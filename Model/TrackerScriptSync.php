@@ -12,9 +12,9 @@ class TrackerScriptSync
     public const OUTCOME_PAUSED = 'paused';
     public const OUTCOME_SKIPPED = 'skipped';
 
-    public const ORIGIN_PATTERN = '#^https://([a-z0-9-]+\.)?fullmetrix\.com$#';
+    public const CONTRACT = 2;
 
-    private const VERSION_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
+    private const VERSION_PATTERN = '/^[0-9a-f]{12}$/';
     private const MAX_SCRIPT_BYTES = 2097152;
     private const TOTAL_TIMEOUT_MS = 3000;
     private const CONNECT_TIMEOUT_MS = 1500;
@@ -46,6 +46,10 @@ class TrackerScriptSync
             return self::OUTCOME_SKIPPED;
         }
 
+        if (Config::VERSION !== $this->config->getModuleVersion()) {
+            $this->config->saveTrackerSync([]);
+            $this->config->saveModuleVersion(Config::VERSION);
+        }
         $breaker = $this->config->getTrackerSync();
         $now = time();
         if ((int) ($breaker['failures'] ?? 0) > 0 && (int) ($breaker['retry_at'] ?? 0) > $now) {
@@ -82,7 +86,7 @@ class TrackerScriptSync
     {
         $response = $this->httpClient->getJson(
             $this->config->getAppOrigin() . '/api/tracker/bundle?key='
-                . rawurlencode($this->config->getConnectionCode()),
+                . rawurlencode($this->config->getConnectionCode()) . '&contract=' . self::CONTRACT,
             [
                 'Accept: application/json',
                 'X-Fullmetrix-Plugin-Version: ' . Config::VERSION,
@@ -110,11 +114,9 @@ class TrackerScriptSync
         $version = $bundle['version'] ?? null;
         $content = $bundle['content'] ?? null;
         $sha256 = $bundle['sha256'] ?? null;
-        $origin = $bundle['origin'] ?? null;
         if (!\is_string($version) || 1 !== preg_match(self::VERSION_PATTERN, $version)
             || !\is_string($content) || '' === $content || \strlen($content) > self::MAX_SCRIPT_BYTES
             || !\is_string($sha256) || !hash_equals(hash('sha256', $content), strtolower($sha256))
-            || !\is_string($origin) || 1 !== preg_match(self::ORIGIN_PATTERN, $origin)
         ) {
             return self::OUTCOME_FAILED;
         }
@@ -137,7 +139,6 @@ class TrackerScriptSync
             'file' => $path,
             'version' => $version,
             'sha256' => strtolower($sha256),
-            'origin' => $origin,
             'previous' => $previous,
             'remote' => false,
             'updated_at' => time(),

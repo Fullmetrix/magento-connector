@@ -9,7 +9,7 @@ use Magento\Framework\FlagManager;
 
 class Config
 {
-    public const VERSION = '1.7.0';
+    public const VERSION = '1.8.0';
 
     public const FLAG_CONNECTION_CODE = 'fullmetrix_connection_code';
     public const FLAG_CONNECTION_SECRET = 'fullmetrix_connection_secret';
@@ -27,6 +27,7 @@ class Config
     public const FLAG_QUEUE_PURGED_AT = 'fullmetrix_queue_purged_at';
     public const FLAG_COMMAND_NONCES = 'fullmetrix_command_nonces';
     public const FLAG_TRACKER_SYNC = 'fullmetrix_tracker_sync';
+    public const FLAG_MODULE_VERSION = 'fullmetrix_module_version';
     public const NONCE_STORED = 'stored';
     public const NONCE_REPLAYED = 'replayed';
     public const NONCE_FAILED = 'failed';
@@ -450,7 +451,7 @@ class Config
     }
 
     /**
-     * Returns the tag settings pushed by Fullmetrix: the cookie keeper switch, its lifetime and the tag attributes.
+     * Returns the tag settings pushed by Fullmetrix: keeper switch, lifetime, opaque key and sending origin.
      *
      * @return array
      */
@@ -529,6 +530,29 @@ class Config
         $this->saveLocalScript([]);
         $this->saveTagSettings([]);
         $this->removeFlag(self::FLAG_TRACKER_SYNC);
+    }
+
+    /**
+     * Returns the module version that last ran the tracker refresh, empty before 1.8.0.
+     *
+     * @return string
+     */
+    public function getModuleVersion(): string
+    {
+        $version = $this->readFlag(self::FLAG_MODULE_VERSION);
+
+        return \is_string($version) ? $version : '';
+    }
+
+    /**
+     * Records the module version that runs the tracker refresh.
+     *
+     * @param string $version
+     * @return void
+     */
+    public function saveModuleVersion(string $version): void
+    {
+        $this->writeFlag(self::FLAG_MODULE_VERSION, $version);
     }
 
     /**

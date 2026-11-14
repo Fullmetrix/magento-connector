@@ -17,6 +17,7 @@
         "magento/module-customer": "*",
         "magento/module-directory": "*",
         "magento/module-sales-rule": "*",
+        "magento/module-csp": "*",
         "magento/module-newsletter": "*",
         "magento/module-configurable-product": "*",
         "magento/module-quote": "*",

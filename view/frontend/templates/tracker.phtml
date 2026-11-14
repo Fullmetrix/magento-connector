@@ -5,28 +5,25 @@ if (!$block->shouldRender()) {
     return;
 }
 $localScriptUrl = $block->getLocalScriptUrl();
-$extraHtml = $block->getExtraAttributesHtml($escaper);
+$attributesHtml = $block->getTagAttributesHtml($escaper);
 ?>
 <?php if ('' !== $localScriptUrl): ?>
 <script
     async
-    id="fullmetrix-tracker"
-    src="<?= $escaper->escapeUrl($localScriptUrl) ?>"
-    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"
-    data-platform="magento"
-    data-fm-origin="<?= $escaper->escapeHtmlAttr($block->getTrackerOrigin()) ?>"<?= /* @noEscape */ $extraHtml ?>
+    id="<?= $escaper->escapeHtmlAttr(\Fullmetrix\Connector\Block\Tracker::ELEMENT_ID) ?>"
+    src="<?= $escaper->escapeUrl($localScriptUrl) ?>"<?= /* @noEscape */ $attributesHtml ?>
 
 ></script>
     <?= /* @noEscape */ $secureRenderer->renderEventListenerAsTag(
         'onerror',
         $block->getRemoteFallbackJs(),
-        '#fullmetrix-tracker'
+        '#' . \Fullmetrix\Connector\Block\Tracker::ELEMENT_ID
     ) ?>
 <?php else: ?>
 <script
     async
-    src="<?= $escaper->escapeUrl($block->getTrackerUrl()) ?>"
-    data-key="<?= $escaper->escapeHtmlAttr($block->getConnectionCode()) ?>"<?= /* @noEscape */ $extraHtml ?>
+    id="<?= $escaper->escapeHtmlAttr(\Fullmetrix\Connector\Block\Tracker::ELEMENT_ID) ?>"
+    src="<?= $escaper->escapeUrl($block->getTrackerUrl()) ?>"<?= /* @noEscape */ $attributesHtml ?>
 
 ></script>
 <?php endif; ?>

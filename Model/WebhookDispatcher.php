@@ -316,7 +316,7 @@ class WebhookDispatcher
     }
 
     /**
-     * Sends an ecommerce webhook or a consent.
+     * Sends an ecommerce webhook.
      *
      * @param array $delivery
      * @param int $timestampMs
@@ -324,16 +324,7 @@ class WebhookDispatcher
      */
     private function send(array $delivery, int $timestampMs): string
     {
-        $isConsent = WebhookPayloadResolver::KIND_CONSENT === $delivery['kind'];
-        $body = json_encode($isConsent ? [
-            'key' => $this->config->getConnectionCode(),
-            'email' => $delivery['data']['email'],
-            'phone' => $delivery['data']['phone'],
-            'country' => $delivery['data']['country'],
-            'consent' => $delivery['data']['consent'],
-            'channels' => ['email'],
-            'pageUrl' => '',
-        ] : [
+        $body = json_encode([
             'event' => $delivery['event'],
             'entity_type' => $delivery['entity_type'],
             'data' => $delivery['data'],
@@ -345,7 +336,7 @@ class WebhookDispatcher
         }
 
         return $this->httpClient->deliver(
-            $this->config->getAppOrigin() . ($isConsent ? '/api/checkout-consent' : '/api/webhooks/ecommerce'),
+            $this->config->getAppOrigin() . '/api/webhooks/ecommerce',
             $body,
             $this->signer->buildHeaders($body)
         );

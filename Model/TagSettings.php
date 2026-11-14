@@ -8,15 +8,9 @@ class TagSettings
 {
     public const MIN_MAX_AGE_DAYS = 1;
     public const MAX_MAX_AGE_DAYS = 390;
-    public const ALLOWED_ATTRIBUTES = [
-        'type',
-        'data-cookieconsent',
-        'data-category',
-        'data-cookiescript',
-        'data-cmp-ab',
-    ];
+    public const TAG_KEY_PATTERN = '/^[A-Z2-7]{20}$/';
 
-    private const VALUE_PATTERN = '#^[A-Za-z0-9 _./-]{1,64}$#';
+    private const ORIGIN_SHAPE = '#^https://[a-z0-9.-]{1,253}$#';
 
     /**
      * Returns the settings used before Fullmetrix ever sent any.
@@ -27,7 +21,12 @@ class TagSettings
     // phpcs:ignore Magento2.Functions.StaticFunction
     public static function defaults(): array
     {
-        return ['keeper' => true, 'maxAgeDays' => self::MAX_MAX_AGE_DAYS, 'attributes' => []];
+        return [
+            'keeper' => true,
+            'maxAgeDays' => self::MAX_MAX_AGE_DAYS,
+            'tagKey' => '',
+            'origin' => SendOrigin::DEFAULT_ORIGIN,
+        ];
     }
 
     /**
@@ -48,12 +47,15 @@ class TagSettings
         return [
             'keeper' => \is_bool($settings['keeper'] ?? null) ? $settings['keeper'] : $defaults['keeper'],
             'maxAgeDays' => self::boundedDays($settings['maxAgeDays'] ?? null),
-            'attributes' => self::attributes($settings['attributes'] ?? null),
+            'tagKey' => self::tagKey($settings['tagKey'] ?? null),
+            'origin' => self::origin($settings['origin'] ?? null),
         ];
     }
 
     /**
-     * Reads the keeper and tag attribute fields of a bundle, null when the bundle carries neither.
+     * Reads the keeper, opaque key and sending origin of a bundle, null when the bundle carries none of them.
+     *
+     * A tagAttributes field sent by an older server is ignored.
      *
      * @param array $bundle
      * @param array $current
@@ -63,7 +65,8 @@ class TagSettings
     // phpcs:ignore Magento2.Functions.StaticFunction
     public static function fromBundle(array $bundle, array $current): ?array
     {
-        if (!\array_key_exists('keeper', $bundle) && !\array_key_exists('tagAttributes', $bundle)) {
+        $carried = array_intersect_key($bundle, ['keeper' => 1, 'tagKey' => 1, 'origin' => 1]);
+        if ([] === $carried) {
             return null;
         }
         $settings = self::normalize($current);
@@ -75,37 +78,40 @@ class TagSettings
                 ? self::boundedDays($keeper['maxAgeDays'] ?? null)
                 : self::MAX_MAX_AGE_DAYS;
         }
-        if (\array_key_exists('tagAttributes', $bundle)) {
-            $settings['attributes'] = self::attributes($bundle['tagAttributes']);
+        if (\array_key_exists('tagKey', $bundle)) {
+            $settings['tagKey'] = self::tagKey($bundle['tagKey']);
+        }
+        if (\array_key_exists('origin', $bundle)) {
+            $settings['origin'] = self::origin($bundle['origin']);
         }
 
         return $settings;
     }
 
     /**
-     * Keeps only the allowed attribute names with safe values.
+     * Returns the opaque key when it has the expected shape, an empty string otherwise.
      *
-     * @param mixed $attributes
-     * @return array
+     * @param mixed $value
+     * @return string
      */
     // Pure helper, nothing to intercept.
     // phpcs:ignore Magento2.Functions.StaticFunction
-    public static function attributes(mixed $attributes): array
+    public static function tagKey(mixed $value): string
     {
-        if (!\is_array($attributes)) {
-            return [];
-        }
-        $kept = [];
-        foreach ($attributes as $name => $value) {
-            if (\in_array($name, self::ALLOWED_ATTRIBUTES, true)
-                && \is_string($value)
-                && 1 === preg_match(self::VALUE_PATTERN, $value)
-            ) {
-                $kept[$name] = $value;
-            }
-        }
+        return \is_string($value) && 1 === preg_match(self::TAG_KEY_PATTERN, $value) ? $value : '';
+    }
 
-        return $kept;
+    /**
+     * Returns the sending origin as published, fullmetrix.com when it does not even look like an https origin.
+     *
+     * @param mixed $value
+     * @return string
+     */
+    // Pure helper, nothing to intercept.
+    // phpcs:ignore Magento2.Functions.StaticFunction
+    private static function origin(mixed $value): string
+    {
+        return \is_string($value) && 1 === preg_match(self::ORIGIN_SHAPE, $value) ? $value : SendOrigin::DEFAULT_ORIGIN;
     }
 
     /**

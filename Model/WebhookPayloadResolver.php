@@ -9,7 +9,6 @@ use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Category;
 use Magento\Catalog\Model\Product;
 use Magento\Customer\Model\CustomerFactory;
-use Magento\Newsletter\Model\SubscriberFactory;
 use Magento\Framework\App\Area;
 use Magento\Quote\Model\QuoteFactory;
 use Magento\Sales\Api\CreditmemoRepositoryInterface;
@@ -23,7 +22,6 @@ use Magento\Store\Model\App\Emulation;
 class WebhookPayloadResolver
 {
     public const KIND_ECOMMERCE = 'ecommerce';
-    public const KIND_CONSENT = 'consent';
     public const KIND_TRACKING = 'tracking';
 
     /**
@@ -38,7 +36,6 @@ class WebhookPayloadResolver
      * @param CategoryRepositoryInterface $categoryRepository
      * @param CouponFactory $couponFactory
      * @param RuleFactory $ruleFactory
-     * @param SubscriberFactory $subscriberFactory
      * @param QuoteFactory $quoteFactory
      * @param Emulation $emulation
      */
@@ -54,7 +51,6 @@ class WebhookPayloadResolver
         private readonly CategoryRepositoryInterface $categoryRepository,
         private readonly CouponFactory $couponFactory,
         private readonly RuleFactory $ruleFactory,
-        private readonly SubscriberFactory $subscriberFactory,
         private readonly QuoteFactory $quoteFactory,
         private readonly Emulation $emulation,
     ) {
@@ -75,7 +71,7 @@ class WebhookPayloadResolver
             return null !== $data ? $this->tracking($data) : null;
         }
         if (WebhookQueue::TYPE_CONSENT === $entityType) {
-            return null !== $data ? $this->consent($data) : null;
+            return null;
         }
         if (null !== $data) {
             return $this->ecommerce($entityType, $event, $data);
@@ -281,59 +277,6 @@ class WebhookPayloadResolver
         }
 
         return $this->ecommerce('coupon', $event, $this->serializer->serializeCoupon($coupon));
-    }
-
-    /**
-     * Resolves a consent row, reading the address or the subscription the hook did not read.
-     *
-     * @param array $data
-     * @return array|null
-     */
-    private function consent(array $data): ?array
-    {
-        $email = (string) ($data['email'] ?? '');
-        if ('' === $email) {
-            return null;
-        }
-        if (isset($data['store_id']) && !$this->storeScope->includesWebsiteStore((int) $data['store_id'])) {
-            return null;
-        }
-        $phone = (string) ($data['phone'] ?? '');
-        $country = (string) ($data['country'] ?? '');
-        $customerId = (int) ($data['customer_id'] ?? 0);
-        if ($customerId > 0) {
-            $customer = $this->customerFactory->create()->load($customerId);
-            if (!$customer->getId() || !$this->storeScope->includesCustomer($customer)) {
-                return null;
-            }
-            $billing = $customer->getDefaultBillingAddress();
-            if ($billing) {
-                $phone = (string) $billing->getTelephone();
-                $country = strtoupper((string) $billing->getCountryId());
-            }
-        }
-        if (!empty($data['check_subscription'])) {
-            $subscriber = $this->subscriberFactory->create()->loadBySubscriberEmail(
-                $email,
-                (int) ($data['website_id'] ?? 0)
-            );
-            if (!$subscriber->getId() || !$subscriber->isSubscribed()) {
-                return null;
-            }
-        }
-
-        $consent = (bool) ($data['consent'] ?? false);
-
-        return [
-            'kind' => self::KIND_CONSENT,
-            'key' => 'consent:' . $email . ':' . ($consent ? '1' : '0'),
-            'data' => [
-                'email' => $email,
-                'phone' => $phone,
-                'country' => $country,
-                'consent' => $consent,
-            ],
-        ];
     }
 
     /**

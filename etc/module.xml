@@ -11,7 +11,7 @@
             <module name="Magento_Customer"/>
             <module name="Magento_Directory"/>
             <module name="Magento_SalesRule"/>
-            <module name="Magento_Newsletter"/>
+            <module name="Magento_Csp"/>
             <module name="Magento_ConfigurableProduct"/>
             <module name="Magento_Quote"/>
             <module name="Magento_Checkout"/>

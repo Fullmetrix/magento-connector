@@ -86,69 +86,6 @@ class WebhookQueue
     }
 
     /**
-     * Records a newsletter consent change.
-     *
-     * @param string $email
-     * @param bool $consent
-     * @param string $phone
-     * @param string $country
-     * @param int $customerId
-     * @param int|null $storeId
-     * @return void
-     */
-    public function enqueueConsent(
-        string $email,
-        bool $consent,
-        string $phone = '',
-        string $country = '',
-        int $customerId = 0,
-        ?int $storeId = null
-    ): void {
-        $email = strtolower(trim($email));
-        if ('' === $email) {
-            return;
-        }
-        $data = [
-            'email' => $email,
-            'phone' => $phone,
-            'country' => strtoupper(trim($country)),
-            'consent' => $consent,
-        ];
-        if ($customerId > 0) {
-            $data['customer_id'] = $customerId;
-        }
-        if (null !== $storeId) {
-            $data['store_id'] = $storeId;
-        }
-        $this->enqueueData(self::TYPE_CONSENT, hash('sha256', $email), 'consent', $data);
-    }
-
-    /**
-     * Records that an order was placed by someone whose subscription must be checked.
-     *
-     * @param string $email
-     * @param int $websiteId
-     * @param string $phone
-     * @param string $country
-     * @return void
-     */
-    public function enqueueOrderConsentCheck(string $email, int $websiteId, string $phone, string $country): void
-    {
-        $email = strtolower(trim($email));
-        if ('' === $email) {
-            return;
-        }
-        $this->enqueueData(self::TYPE_CONSENT, 'order:' . hash('sha256', $email), 'consent', [
-            'email' => $email,
-            'phone' => $phone,
-            'country' => strtoupper(trim($country)),
-            'consent' => true,
-            'website_id' => $websiteId,
-            'check_subscription' => true,
-        ]);
-    }
-
-    /**
      * Records an event whose payload is already known.
      *
      * @param string $entityType

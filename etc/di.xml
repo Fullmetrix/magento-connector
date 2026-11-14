@@ -26,6 +26,15 @@
             sortOrder="-1000"
         />
     </type>
+    <type name="Magento\Csp\Model\CompositePolicyCollector">
+        <arguments>
+            <argument name="collectors" xsi:type="array">
+                <item name="fullmetrix_send_origin" xsi:type="object" sortOrder="200">
+                    Fullmetrix\Connector\Model\CspOriginCollector
+                </item>
+            </argument>
+        </arguments>
+    </type>
     <type name="Magento\InventoryApi\Api\SourceItemsSaveInterface">
         <plugin
             name="fullmetrix_inventory_source_items_save"

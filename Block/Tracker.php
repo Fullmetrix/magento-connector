@@ -7,8 +7,8 @@ namespace Fullmetrix\Connector\Block;
 use Fullmetrix\Connector\Model\ApiClient;
 use Fullmetrix\Connector\Model\Config;
 use Fullmetrix\Connector\Model\LocalScript;
+use Fullmetrix\Connector\Model\SendOrigin;
 use Fullmetrix\Connector\Model\TagSettings;
-use Fullmetrix\Connector\Model\TrackerScriptSync;
 use Fullmetrix\Connector\Plugin\KeeperEndpoint;
 use Magento\Framework\UrlInterface;
 use Magento\Framework\View\Element\Template;
@@ -16,6 +16,20 @@ use Magento\Framework\View\Element\Template\Context;
 
 class Tracker extends Template
 {
+    public const ELEMENT_ID = 'kvo';
+    public const PLATFORM = 'mg';
+    public const EXCLUSION_ATTRIBUTES = [
+        'data-no-optimize' => '1',
+        'data-no-defer' => '1',
+        'data-no-minify' => '1',
+        'data-cfasync' => 'false',
+        'nowprocket' => '1',
+        'data-noptimize' => '1',
+        'data-ao-skip' => '1',
+        'data-pagespeed-no-defer' => '1',
+        'data-wpfc-render' => 'false',
+    ];
+
     /**
      * @param Context $context
      * @param Config $config
@@ -32,7 +46,7 @@ class Tracker extends Template
     }
 
     /**
-     * Tells whether the tracker tag is rendered, from local settings only.
+     * Tells whether the tag is rendered, from local settings only.
      *
      * @return bool
      */
@@ -46,19 +60,33 @@ class Tracker extends Template
     }
 
     /**
-     * Returns the tracker url.
+     * Returns the remote address of the script, built by the module on fullmetrix.com.
      *
      * @return string
      */
     public function getTrackerUrl(): string
     {
-        $cacheBucket = (int) floor(time() / 300);
-
-        return $this->config->getAppOrigin() . '/t.js?ver=' . Config::VERSION . '.' . $cacheBucket;
+        return SendOrigin::fallbackUrl($this->getTagKey());
     }
 
     /**
-     * Returns the address of the tracker file served from the store, empty when the remote tag applies.
+     * Returns the opaque key of the tag, the connection code until the bundle sent one.
+     *
+     * @return string
+     */
+    public function getTagKey(): string
+    {
+        try {
+            $key = TagSettings::tagKey($this->config->getTagSettings()['tagKey'] ?? null);
+        } catch (\Throwable) {
+            $key = '';
+        }
+
+        return '' !== $key ? $key : $this->getConnectionCode();
+    }
+
+    /**
+     * Returns the address of the script file served from the store, empty when the remote tag applies.
      *
      * Only the settings already read for this page decide, the file itself is never touched here.
      *
@@ -84,23 +112,29 @@ class Tracker extends Template
     }
 
     /**
-     * Returns the Fullmetrix origin the local tracker file sends to.
+     * Returns the origin the script sends to.
+     *
+     * It is fullmetrix.com unless the published origin is a subdomain of the store.
      *
      * @return string
      */
-    public function getTrackerOrigin(): string
+    public function getSendOrigin(): string
     {
         try {
-            $origin = (string) ($this->config->getLocalScript()['origin'] ?? '');
+            $published = $this->config->getTagSettings()['origin'] ?? null;
+            $webUrl = (string) $this->_storeManager->getStore()->getBaseUrl(UrlInterface::URL_TYPE_WEB);
+            $domain = SendOrigin::declaredDomain($webUrl);
         } catch (\Throwable) {
-            $origin = '';
+            return SendOrigin::DEFAULT_ORIGIN;
         }
 
-        return 1 === preg_match(TrackerScriptSync::ORIGIN_PATTERN, $origin) ? $origin : 'https://fullmetrix.com';
+        return SendOrigin::accepted($published, $domain);
     }
 
     /**
-     * Returns the code that loads the remote tag when the local file cannot be loaded.
+     * Returns the code that loads the remote script when the local file cannot be loaded.
+     *
+     * The script element carries no type attribute.
      *
      * A page kept by the full page cache may point at a file that no longer exists.
      *
@@ -110,9 +144,9 @@ class Tracker extends Template
     {
         $flags = \JSON_HEX_TAG | \JSON_HEX_AMP | \JSON_HEX_APOS | \JSON_HEX_QUOT | \JSON_UNESCAPED_SLASHES;
 
-        $js = 'var s=document.createElement("script");s.async=true;s.src=' . json_encode($this->getTrackerUrl(), $flags)
-            . ';s.setAttribute("data-key",' . json_encode($this->getConnectionCode(), $flags) . ')';
-        foreach ($this->getExtraAttributes() as $name => $value) {
+        $js = 'var s=document.createElement("script");s.async=true;s.src='
+            . json_encode($this->getTrackerUrl(), $flags);
+        foreach ($this->getTagAttributes() as $name => $value) {
             $js .= ';s.setAttribute(' . json_encode($name, $flags) . ',' . json_encode($value, $flags) . ')';
         }
 
@@ -120,35 +154,46 @@ class Tracker extends Template
     }
 
     /**
-     * Returns the attributes added after data-key: the cookie keeper path, then the attributes Fullmetrix pushed.
+     * Returns every attribute of the neutral tag.
+     *
+     * Key, platform, module version, keeper path, sending origin when it is not fullmetrix.com,
+     * then the cache plugin exclusions. Nothing comes from the server.
      *
      * @return array
      */
-    public function getExtraAttributes(): array
+    public function getTagAttributes(): array
     {
+        $attributes = [
+            'data-kvo' => $this->getTagKey(),
+            'data-kvo-p' => self::PLATFORM,
+            'data-kvo-v' => Config::VERSION,
+        ];
         try {
-            $settings = $this->config->getTagSettings();
+            $keeper = (bool) ($this->config->getTagSettings()['keeper'] ?? false);
         } catch (\Throwable) {
-            return [];
+            $keeper = false;
         }
-        $attributes = [];
-        if ($settings['keeper']) {
-            $attributes['data-fm-keeper'] = $this->getKeeperPath();
+        if ($keeper) {
+            $attributes['data-kvo-k'] = $this->getKeeperPath();
+        }
+        $origin = $this->getSendOrigin();
+        if (SendOrigin::DEFAULT_ORIGIN !== $origin) {
+            $attributes['data-kvo-o'] = $origin;
         }
 
-        return $attributes + TagSettings::attributes($settings['attributes']);
+        return $attributes + self::EXCLUSION_ATTRIBUTES;
     }
 
     /**
-     * Returns the extra tag attributes as escaped markup, one per line, for the tracker template.
+     * Returns the tag attributes as escaped markup, one per line, for the template.
      *
      * @param \Magento\Framework\Escaper $escaper
      * @return string
      */
-    public function getExtraAttributesHtml($escaper): string
+    public function getTagAttributesHtml($escaper): string
     {
         $html = '';
-        foreach ($this->getExtraAttributes() as $name => $value) {
+        foreach ($this->getTagAttributes() as $name => $value) {
             $html .= "\n    " . $escaper->escapeHtmlAttr($name)
                 . '="' . $escaper->escapeHtmlAttr($value) . '"';
         }
