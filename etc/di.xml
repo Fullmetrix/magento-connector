@@ -49,6 +49,13 @@
             sortOrder="1000"
         />
     </type>
+    <type name="Magento\CatalogInventory\Api\StockManagementInterface">
+        <plugin
+            name="fullmetrix_legacy_stock_management"
+            type="Fullmetrix\Connector\Plugin\LegacyStockManagementPlugin"
+            sortOrder="1000"
+        />
+    </type>
     <type name="Magento\CatalogRule\Model\Indexer\Rule\RuleProductIndexer">
         <plugin
             name="fullmetrix_catalog_rule_indexer"

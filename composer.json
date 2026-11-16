@@ -23,10 +23,10 @@
         "magento/module-quote": "*",
         "magento/module-checkout": "*",
         "magento/module-catalog-inventory": "*",
-        "magento/module-catalog-rule": "*",
-        "magento/module-inventory-api": "*",
-        "magento/module-inventory-sales": "*",
-        "magento/module-inventory-sales-api": "*"
+        "magento/module-catalog-rule": "*"
+    },
+    "suggest": {
+        "magento/module-inventory-sales": "Salable quantities and stock per website when Magento Inventory (MSI) is enabled"
     },
     "autoload": {
         "files": [

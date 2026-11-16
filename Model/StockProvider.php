@@ -6,25 +6,17 @@ namespace Fullmetrix\Connector\Model;
 
 use Magento\Catalog\Model\Product;
 use Magento\CatalogInventory\Api\StockRegistryInterface;
-use Magento\InventorySalesApi\Api\Data\SalesChannelInterface;
-use Magento\InventorySalesApi\Api\GetProductSalableQtyInterface;
-use Magento\InventorySalesApi\Api\IsProductSalableInterface;
-use Magento\InventorySalesApi\Api\StockResolverInterface;
 
 class StockProvider
 {
     /**
      * @param StockRegistryInterface $stockRegistry
-     * @param StockResolverInterface $stockResolver
-     * @param GetProductSalableQtyInterface $getProductSalableQty
-     * @param IsProductSalableInterface $isProductSalable
+     * @param MsiStock $msiStock
      * @param StoreSettingsProvider $storeSettings
      */
     public function __construct(
         private readonly StockRegistryInterface $stockRegistry,
-        private readonly StockResolverInterface $stockResolver,
-        private readonly GetProductSalableQtyInterface $getProductSalableQty,
-        private readonly IsProductSalableInterface $isProductSalable,
+        private readonly MsiStock $msiStock,
         private readonly StoreSettingsProvider $storeSettings,
     ) {
     }
@@ -56,14 +48,10 @@ class StockProvider
         }
 
         $sku = (string) $product->getSku();
-        if ('' !== $sku) {
+        if ('' !== $sku && $this->msiStock->isAvailable()) {
             try {
-                $stock = $this->stockResolver->execute(
-                    SalesChannelInterface::TYPE_WEBSITE,
-                    $this->storeSettings->getWebsiteCode()
-                );
-                $stockId = (int) $stock->getStockId();
-                $status = $this->isProductSalable->execute($sku, $stockId) ? 'instock' : 'outofstock';
+                $stockId = $this->msiStock->stockId($this->storeSettings->getWebsiteCode());
+                $status = $this->msiStock->isSalable($sku, $stockId) ? 'instock' : 'outofstock';
 
                 return [
                     'status' => $status,
@@ -102,7 +90,7 @@ class StockProvider
     private function salableQuantity(string $sku, int $stockId): ?float
     {
         try {
-            return (float) $this->getProductSalableQty->execute($sku, $stockId);
+            return $this->msiStock->salableQuantity($sku, $stockId);
         // A composite product has no salable quantity of its own.
         // phpcs:ignore Magento2.CodeAnalysis.EmptyBlock
         } catch (\Throwable) {

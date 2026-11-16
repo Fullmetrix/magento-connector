@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1
+
+- Le module fonctionne quand Magento Inventory (MSI) est désactivé ou retiré par composer. Avant, toutes les routes de synchronisation répondaient 500 (`Cannot instantiate interface Magento\InventorySalesApi\Api\StockResolverInterface`) parce que les services MSI étaient injectés dès la construction des contrôleurs.
+- Les services MSI sont chargés à l'usage par `MsiStock`, seulement si `Magento_InventorySalesApi` et `Magento_InventorySales` sont actifs et présents. Sinon, le stock vient du stock classique (`CatalogInventory`), comme le repli existant.
+- MSI n'est plus requis par `composer.json` ni `module.xml` : Magento accepte de désactiver MSI avec le module installé.
+- Si Magento ne parvient pas à construire un service MSI, le module passe au stock classique pour le reste de la requête au lieu de réessayer pour chaque produit.
+- Sans MSI, les ventes, annulations et remises en stock d'un remboursement mettent en file les produits concernés (`LegacyStockManagementPlugin` sur `StockManagementInterface`, une seule insertion), pour que le stock vu par Fullmetrix suive le stock classique. Avec MSI, ce plugin ne fait rien : les plugins MSI existants couvrent déjà ces cas.
+
 ## 1.8.0
 
 - Balise de mesure neutre : `id="kvo"`, clé opaque `data-kvo` (reçue du paquet, validée `^[A-Z2-7]{20}$`, sinon le code de connexion), `data-kvo-p="mg"`, `data-kvo-v`, `data-kvo-k` (chemin du point cookie) et, seulement si l'origine des envois n'est pas `fullmetrix.com`, `data-kvo-o`. Les attributs d'exclusion des extensions de cache (`data-no-optimize`, `data-no-defer`, `data-no-minify`, `data-cfasync`, `nowprocket`, `data-noptimize`, `data-ao-skip`, `data-pagespeed-no-defer`, `data-wpfc-render`) sont posés en dur ; plus aucun attribut ne vient du paquet.
